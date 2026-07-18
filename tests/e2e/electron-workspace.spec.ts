@@ -12,11 +12,12 @@ test.skip(!electronRuntimeAvailable, "Electron's optional runtime binary is unav
 
 async function launch(userData: string) {
   const packagedExecutable = process.env.CODEX_STUDIO_PACKAGED_APP;
-  const launchEnvironment = { ...process.env };
   // Electron-based hosts (including some IDE/Codex sessions) may export this
   // variable for their own child processes. Passing it through would make the
   // tested Electron executable behave like plain Node instead of launching UI.
-  delete launchEnvironment.ELECTRON_RUN_AS_NODE;
+  const launchEnvironment = Object.fromEntries(
+    Object.entries(process.env).filter((entry): entry is [string, string] => entry[0] !== "ELECTRON_RUN_AS_NODE" && entry[1] !== undefined)
+  );
   return electron.launch({
     ...(packagedExecutable ? { executablePath: packagedExecutable } : {}),
     args: [`--user-data-dir=${userData}`, ...(packagedExecutable ? [] : [path.resolve(".")])],
