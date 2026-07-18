@@ -16,7 +16,7 @@ Electron main process
 
 ## Desktop boundary
 
-The Electron renderer has `contextIsolation`, sandboxing, and Web security enabled, with Node integration disabled. External HTTPS login URLs are handed to the operating-system browser. The main process starts a loopback-only standalone Next.js server and stores mutable projects in Electron’s user-data directory.
+The Electron renderer has `contextIsolation`, sandboxing, and Web security enabled, with Node integration disabled. A narrow preload bridge offers native choose/create, recent, open, relink, and revoke operations using opaque workspace IDs. External HTTPS login URLs are handed to the operating-system browser. The main process starts a loopback-only standalone Next.js server against one user-selected portable workspace at a time and restarts it when that workspace changes. Canonical paths and platform grants remain in Electron `userData`; project content does not.
 
 The packaged resources are split deliberately:
 
@@ -47,7 +47,7 @@ Any agent failure, timeout, removed instrumentation, render failure, or horizont
 
 ## Project persistence
 
-Each project is an isolated directory with atomic JSON writes, generated brand/token/slide sources, the editable Web artifact, visual reviews, exports, history, and an immutable initial snapshot used by **Restore project**. API routes resolve a validated project ID from the request, and new project IDs use collision-safe slugs.
+Each project is an isolated directory inside the authorized portable workspace, with atomic JSON writes, generated brand/token/slide sources, the editable Web artifact, visual reviews, exports, history, and an immutable initial snapshot used by **Restore project**. API routes resolve only a validated project ID from the request, new project IDs use collision-safe slugs, and realpath validation rejects traversal and symlink escapes. The manifest, registry schema, migration rules, and recovery behavior are specified in [portable-workspaces.md](portable-workspaces.md).
 
 ## Remaining production work
 

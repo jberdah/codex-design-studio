@@ -11,7 +11,7 @@ export default defineConfig({
     screenshot: "only-on-failure"
   },
   webServer: {
-    command: "NEXT_PUBLIC_CODEX_STUDIO_MODE=fallback npm run build && CODEX_STUDIO_DATA_DIR=.e2e-workspace HOSTNAME=127.0.0.1 PORT=3100 npm run start",
+    command: "NEXT_PUBLIC_CODEX_STUDIO_MODE=fallback npm run build && mkdir -p .e2e-workspace && CODEX_STUDIO_DATA_DIR=$PWD/.e2e-workspace HOSTNAME=127.0.0.1 PORT=3100 npm run start",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: true,
     timeout: 120_000
