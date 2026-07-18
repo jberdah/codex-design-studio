@@ -1,0 +1,4 @@
+interface:
+  display_name: "Brand Studio"
+  short_description: "Generate coherent branded deliverables"
+  default_prompt: "Use $brand-studio to create or refine branded web and slide deliverables from project tokens."

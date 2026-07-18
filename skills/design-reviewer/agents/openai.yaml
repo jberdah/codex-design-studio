@@ -1,0 +1,4 @@
+interface:
+  display_name: "Design Reviewer"
+  short_description: "Validate brand and layout consistency"
+  default_prompt: "Use $design-reviewer to validate the project landing page and slide deck against its design tokens."

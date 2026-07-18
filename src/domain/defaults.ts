@@ -1,0 +1,61 @@
+import type { ProjectData } from "./types";
+
+export const defaultProject: ProjectData = {
+  id: "demo",
+  name: "Asteria Launch",
+  createdAt: "2026-07-18T09:00:00.000Z",
+  updatedAt: "2026-07-18T09:00:00.000Z",
+  version: 1,
+  brand: {
+    name: "Asteria",
+    industry: "Climate intelligence",
+    audience: "Operations leaders in growing companies",
+    promise: "Turn fragmented climate data into confident action.",
+    personality: ["precise", "optimistic", "premium"],
+    tone: "Clear, confident and human",
+    visualDirection: "Editorial clarity, luminous gradients and generous space"
+  },
+  tokens: {
+    version: "0.1.0",
+    colors: {
+      primary: "#1C3D38",
+      secondary: "#7B8F69",
+      accent: "#D8FF72",
+      background: "#F3F1E9",
+      surface: "#FFFFFF",
+      text: "#17201E"
+    },
+    typography: {
+      display: "Georgia",
+      body: "Arial",
+      scale: { h1: 64, h2: 36, body: 18, caption: 13 }
+    },
+    spacing: { xs: 8, sm: 12, md: 20, lg: 32, xl: 56 },
+    shape: { radiusSm: 8, radiusCard: 22, radiusButton: 999 },
+    media: { style: "editorial premium", lighting: "soft", composition: "minimal" },
+    voice: { attributes: ["clear", "confident", "non-technical"], forbiddenPatterns: ["game-changing", "revolutionary"] }
+  },
+  landing: {
+    eyebrow: "Climate intelligence, clarified",
+    headline: "See the signal. Shape what comes next.",
+    subhead: "Asteria turns scattered operational data into a clear, shared path toward measurable climate progress.",
+    primaryCta: "Explore your impact",
+    secondaryCta: "View the platform",
+    benefits: [
+      { title: "One trusted picture", body: "Bring operational, supplier and climate signals into a decision-ready view." },
+      { title: "From insight to action", body: "Prioritise the moves that reduce risk and create measurable progress." },
+      { title: "Built for alignment", body: "Give every team the same language, evidence and next steps." }
+    ],
+    proof: [
+      { value: "42%", label: "faster reporting cycles" },
+      { value: "3.4×", label: "more actions completed" },
+      { value: "1", label: "shared source of truth" }
+    ],
+    finalHeadline: "Move from climate ambition to operational clarity."
+  },
+  slides: [
+    { id: "slide-cover", type: "cover", eyebrow: "ASTERIA / 2026", title: "Climate intelligence for decisions that matter", body: "A launch narrative powered by one executable brand system." },
+    { id: "slide-value", type: "value", eyebrow: "THE OPPORTUNITY", title: "Turn fragmented signals into coordinated action", bullets: ["Unify operational and supplier data", "Surface the highest-impact decisions", "Keep teams aligned around measurable progress"] },
+    { id: "slide-metrics", type: "metrics", eyebrow: "THE OUTCOME", title: "Clarity that compounds", metrics: [{ value: "42%", label: "faster reporting" }, { value: "3.4×", label: "more actions completed" }, { value: "1", label: "shared source of truth" }] }
+  ]
+};
