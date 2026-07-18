@@ -1,0 +1,5 @@
+{
+  "name": "fixture-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.12.0"
+}
