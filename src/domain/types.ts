@@ -1,3 +1,5 @@
+export * from "./repository";
+
 export type DeliverableType = "web" | "slides";
 
 export interface BrandProfile {

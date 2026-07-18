@@ -1,0 +1,17 @@
+{
+  "themes": {
+    "light": {
+      "color": {
+        "surface": "#ffffff"
+      }
+    },
+    "dark": {
+      "color": {
+        "surface": "#101114"
+      }
+    }
+  },
+  "spacing": {
+    "small": 8
+  }
+}

@@ -1,0 +1,13 @@
+:root {
+  --color-brand: #3157d5;
+  --space-card: 1.5rem;
+}
+
+[data-theme="night"] {
+  --color-brand: #a8b9ff;
+}
+
+@font-face {
+  font-family: "Fixture Sans";
+  src: url("/fonts/fixture.woff2") format("woff2");
+}
