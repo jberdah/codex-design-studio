@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import readline from "node:readline";
+import { PNG } from "pngjs";
 import type { ProjectData } from "@/domain/types";
 import type { VisualAssetBrief, VisualAssetOutputParameters, VisualAssetTarget, VisualGenerationAdapter, VisualGenerationOutput, VisualGenerationRequest } from "@/domain/visual-assets";
 import { bundleRoot, codexEntrypoint, safeProjectRoot } from "./paths";
@@ -144,6 +145,41 @@ async function consumeImageItem(item: ImageGenerationItem, maxBytes: number): Pr
   return { bytes, providerItemId: item.id, revisedPrompt: item.revisedPrompt ?? undefined };
 }
 
+const MAX_NORMALIZED_PIXELS = 16_777_216;
+
+/** Native Codex image items are PNGs but may not honor the requested pixel size. */
+export function normalizeCodexPng(bytes: Uint8Array, output: VisualAssetOutputParameters) {
+  if (output.encoding !== "png") throw new Error("ChatGPT/Codex generation currently supports PNG output; use an explicit Platform adapter for JPEG or WebP.");
+  if (bytes.length < 24 || ![137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes[index] === value)) throw new Error("Codex imageGeneration must return a valid PNG result.");
+  const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const sourceWidth = header.getUint32(16);
+  const sourceHeight = header.getUint32(20);
+  if (!sourceWidth || !sourceHeight || sourceWidth * sourceHeight > MAX_NORMALIZED_PIXELS || output.width * output.height > MAX_NORMALIZED_PIXELS) throw new Error("Codex PNG dimensions exceed the safe normalization budget.");
+  if (sourceWidth === output.width && sourceHeight === output.height) return bytes;
+
+  const source = PNG.sync.read(Buffer.from(bytes));
+  const destination = { width: output.width, height: output.height, data: new Uint8Array(output.width * output.height * 4) };
+  for (let y = 0; y < output.height; y += 1) {
+    const sourceY = Math.max(0, Math.min(source.height - 1, (y + 0.5) * source.height / output.height - 0.5));
+    const y0 = Math.floor(sourceY); const y1 = Math.min(source.height - 1, y0 + 1); const yWeight = sourceY - y0;
+    for (let x = 0; x < output.width; x += 1) {
+      const sourceX = Math.max(0, Math.min(source.width - 1, (x + 0.5) * source.width / output.width - 0.5));
+      const x0 = Math.floor(sourceX); const x1 = Math.min(source.width - 1, x0 + 1); const xWeight = sourceX - x0;
+      const targetOffset = (y * output.width + x) * 4;
+      const topLeft = (y0 * source.width + x0) * 4; const topRight = (y0 * source.width + x1) * 4;
+      const bottomLeft = (y1 * source.width + x0) * 4; const bottomRight = (y1 * source.width + x1) * 4;
+      for (let channel = 0; channel < 4; channel += 1) {
+        const top = source.data[topLeft + channel] * (1 - xWeight) + source.data[topRight + channel] * xWeight;
+        const bottom = source.data[bottomLeft + channel] * (1 - xWeight) + source.data[bottomRight + channel] * xWeight;
+        destination.data[targetOffset + channel] = Math.round(top * (1 - yWeight) + bottom * yWeight);
+      }
+    }
+  }
+  const normalized = new Uint8Array(PNG.sync.write(destination));
+  if (normalized.byteLength > output.maxBytes) throw new Error("Normalized Codex PNG violates the generation byte guard.");
+  return normalized;
+}
+
 export class CodexAppServerImageAdapter implements VisualGenerationAdapter {
   readonly id = "codex-app-server" as const;
   readonly credentialMode = "chatgpt" as const;
@@ -195,7 +231,8 @@ export class CodexAppServerImageAdapter implements VisualGenerationAdapter {
       if (signal?.aborted) abort();
       await completed;
       if (items.length !== request.prompts.length) throw new Error(`Codex completed with ${items.length} imageGeneration items; ${request.prompts.length} were required.`);
-      return Promise.all(items.map((item) => consumeImageItem(item, request.output.maxBytes)));
+      const outputs = await Promise.all(items.map((item) => consumeImageItem(item, request.output.maxBytes)));
+      return outputs.map((output) => ({ ...output, bytes: normalizeCodexPng(output.bytes, request.output) }));
     } finally {
       if (completionTimer) clearTimeout(completionTimer); signal?.removeEventListener("abort", abort); off(); session.close();
     }

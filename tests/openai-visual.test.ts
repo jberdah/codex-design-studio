@@ -22,9 +22,9 @@ afterEach(async () => {
   await rm(workspace, { recursive: true, force: true });
 });
 
-function image() {
-  const data = new Uint8Array(64 * 64 * 4).fill(255);
-  return new Uint8Array(PNG.sync.write({ width: 64, height: 64, data }));
+function image(width = 64, height = 64) {
+  const data = new Uint8Array(width * height * 4).fill(255);
+  return new Uint8Array(PNG.sync.write({ width, height, data }));
 }
 
 function request(projectId: string): VisualGenerationRequest {
@@ -116,5 +116,12 @@ describe("OpenAI visual generation adapters", () => {
     expect(await keychain.getApiKey()).toBe("sk-test-keychain-123456");
     await keychain.deleteApiKey();
     expect(calls.map((args) => args[0])).toEqual(["add-generic-password", "find-generic-password", "delete-generic-password"]);
+  });
+
+  it("normalizes native Codex PNG dimensions and refuses unsupported zero-key encodings", async () => {
+    const { normalizeCodexPng } = await import("@/server/openai-visual");
+    const normalized = normalizeCodexPng(image(96, 80), request("normalize").output);
+    expect(PNG.sync.read(Buffer.from(normalized))).toMatchObject({ width: 64, height: 64 });
+    expect(() => normalizeCodexPng(image(), { ...request("normalize").output, encoding: "webp" })).toThrow("currently supports PNG");
   });
 });
