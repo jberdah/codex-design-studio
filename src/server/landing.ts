@@ -1,8 +1,20 @@
-import type { ProjectData } from "@/domain/types";
+import type { NavigationIcon, ProjectData } from "@/domain/types";
 
 const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (character) => ({
   "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#039;"
 }[character] ?? character));
+
+function navigationIcon(icon: NavigationIcon) {
+  const paths: Record<NavigationIcon, string> = {
+    layers: '<path d="M4 7l8-4 8 4-8 4-8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/>',
+    compass: '<circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5 5-2Z"/>',
+    chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+    sparkles: '<path d="m12 3 1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3ZM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8L19 15Z"/>',
+    leaf: '<path d="M20 4C11 4 5 8 5 15c0 3 2 5 5 5 7 0 10-7 10-16Z"/><path d="M4 21c3-5 7-8 12-11"/>',
+    arrow: '<path d="M5 12h14M14 7l5 5-5 5"/>'
+  };
+  return `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${paths[icon]}</svg>`;
+}
 
 export function tokensToCss(project: ProjectData) {
   const { tokens } = project;
@@ -22,6 +34,8 @@ export function tokensToCss(project: ProjectData) {
 
 export function renderLandingHtml(project: ProjectData) {
   const { brand, landing } = project;
+  const navigation = landing.navigation ?? { showIcons: false, items: [{ label: "Platform", icon: "layers" as const }, { label: "Approach", icon: "compass" as const }, { label: "Insights", icon: "chart" as const }] };
+  const navigationItems = navigation.items.map((item) => `<a>${navigation.showIcons ? navigationIcon(item.icon) : ""}<span>${escapeHtml(item.label)}</span></a>`).join("");
   const benefitCards = landing.benefits.map((benefit, index) => `
       <article class="benefit" data-design-id="benefit-${index + 1}" data-design-label="Benefit ${index + 1}">
         <span>0${index + 1}</span><h3>${escapeHtml(benefit.title)}</h3><p>${escapeHtml(benefit.body)}</p>
@@ -37,14 +51,14 @@ export function renderLandingHtml(project: ProjectData) {
 <style>
 ${tokensToCss(project)}
 *{box-sizing:border-box}body{margin:0;background:var(--brand-background);color:var(--brand-text);font-family:var(--font-body);line-height:1.5}a{text-decoration:none;color:inherit}
-.page{min-height:100vh;overflow:hidden}.nav{height:80px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(24px,6vw,92px)}.brand{font-family:var(--font-display);font-size:24px;font-weight:700}.nav-links{display:flex;gap:28px;font-size:14px}.nav-cta,.button{border-radius:var(--radius-button);padding:12px 20px;background:var(--brand-primary);color:white;font-weight:700}
+.page{min-height:100vh;overflow:hidden}.nav{height:80px;display:flex;align-items:center;justify-content:space-between;padding:0 clamp(24px,6vw,92px)}.brand{font-family:var(--font-display);font-size:24px;font-weight:700}.nav-links{display:flex;gap:28px;font-size:14px}.nav-links a{display:inline-flex;align-items:center;gap:8px}.nav-icon{width:17px;height:17px;flex:none}.nav-cta,.button{border-radius:var(--radius-button);padding:12px 20px;background:var(--brand-primary);color:white;font-weight:700}
 .hero{position:relative;min-height:650px;padding:80px clamp(24px,8vw,120px) 100px;display:grid;grid-template-columns:1.2fr .8fr;align-items:center;gap:60px}.hero:after{content:"";position:absolute;width:520px;height:520px;right:-80px;top:20px;border-radius:50%;background:radial-gradient(circle at 30% 30%,var(--brand-accent),var(--brand-secondary) 48%,var(--brand-primary));filter:saturate(.85)}.hero-copy{position:relative;z-index:1}.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:12px;font-weight:800;color:var(--brand-secondary)}h1{font-family:var(--font-display);font-size:clamp(52px,6.2vw,92px);line-height:.96;letter-spacing:-.055em;margin:20px 0 28px;max-width:900px}h2{font-family:var(--font-display);font-size:clamp(38px,4vw,62px);line-height:1.02;letter-spacing:-.04em}.subhead{font-size:19px;max-width:620px;color:color-mix(in srgb,var(--brand-text) 72%,transparent)}.actions{display:flex;align-items:center;gap:22px;margin-top:36px}.link-button{font-weight:700;border-bottom:1px solid currentColor}.orb-label{position:relative;z-index:1;margin-top:340px;color:white;font-size:12px;letter-spacing:.12em;text-transform:uppercase}
 .section{padding:100px clamp(24px,8vw,120px)}.section-head{max-width:780px;margin-bottom:50px}.benefit-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.benefit{background:var(--brand-surface);padding:34px;border-radius:var(--radius-card);min-height:260px;border:1px solid color-mix(in srgb,var(--brand-primary) 9%,transparent)}.benefit>span{font-size:12px;color:var(--brand-secondary)}.benefit h3{font-family:var(--font-display);font-size:28px;margin:45px 0 12px}.benefit p{color:color-mix(in srgb,var(--brand-text) 70%,transparent)}
 .proof{background:var(--brand-primary);color:white}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.metric{padding:38px 0;border-top:1px solid rgba(255,255,255,.25)}.metric strong{display:block;font-family:var(--font-display);font-size:64px;color:var(--brand-accent)}.metric span{font-size:14px}.final{display:flex;align-items:center;justify-content:space-between;gap:40px}.final h2{max-width:760px}.footer{padding:35px clamp(24px,8vw,120px);display:flex;justify-content:space-between;border-top:1px solid color-mix(in srgb,var(--brand-primary) 15%,transparent);font-size:13px}
 [data-design-id]{outline:2px solid transparent;outline-offset:4px;transition:outline-color .15s,filter .15s}[data-design-id]:hover{outline-color:#7c5cff;cursor:pointer;filter:brightness(.98)}[data-selected="true"]{outline:3px solid #7c5cff!important}.selection-tag{position:fixed;z-index:9999;background:#17151f;color:white;border-radius:6px;padding:5px 8px;font:11px/1.2 Arial;pointer-events:none;display:none}
 @media(max-width:760px){.nav-links{display:none}.hero{grid-template-columns:1fr;min-height:720px;padding-top:55px}.hero:after{width:360px;height:360px;right:-140px;top:430px}.orb-label{display:none}.benefit-grid,.metrics{grid-template-columns:1fr}.section{padding-top:72px;padding-bottom:72px}.final{align-items:flex-start;flex-direction:column}h1{font-size:54px}.metric strong{font-size:54px}}
 </style></head><body><div class="page">
-<nav class="nav" data-design-id="navigation" data-design-label="Navigation"><a class="brand">${escapeHtml(brand.name)}</a><div class="nav-links"><a>Platform</a><a>Approach</a><a>Insights</a></div><a class="nav-cta">Talk to us</a></nav>
+<nav class="nav" data-design-id="navigation" data-design-label="Navigation"><a class="brand">${escapeHtml(brand.name)}</a><div class="nav-links">${navigationItems}</div><a class="nav-cta">Talk to us</a></nav>
 <main><section class="hero" data-design-id="hero" data-design-label="Hero section"><div class="hero-copy"><div class="eyebrow" data-design-id="hero-eyebrow" data-design-label="Hero eyebrow">${escapeHtml(landing.eyebrow)}</div><h1 data-design-id="hero-title" data-design-label="Hero title">${escapeHtml(landing.headline)}</h1><p class="subhead" data-design-id="hero-copy" data-design-label="Hero description">${escapeHtml(landing.subhead)}</p><div class="actions" data-design-id="hero-actions" data-design-label="Hero actions"><a class="button">${escapeHtml(landing.primaryCta)}</a><a class="link-button">${escapeHtml(landing.secondaryCta)} →</a></div></div><div class="orb-label">A clearer view of progress</div></section>
 <section class="section" data-design-id="benefits" data-design-label="Benefits section"><div class="section-head"><div class="eyebrow">Designed for decisions</div><h2>Clarity at every step.</h2></div><div class="benefit-grid">${benefitCards}</div></section>
 <section class="section proof" data-design-id="proof" data-design-label="Proof section"><div class="section-head"><div class="eyebrow">Measured progress</div><h2>Built to turn momentum into evidence.</h2></div><div class="metrics">${proofItems}</div></section>

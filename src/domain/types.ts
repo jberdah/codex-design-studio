@@ -31,7 +31,15 @@ export interface DesignTokens {
   voice: { attributes: string[]; forbiddenPatterns: string[] };
 }
 
+export type NavigationIcon = "layers" | "compass" | "chart" | "sparkles" | "leaf" | "arrow";
+
+export interface NavigationSettings {
+  showIcons: boolean;
+  items: Array<{ label: string; icon: NavigationIcon }>;
+}
+
 export interface LandingContent {
+  navigation: NavigationSettings;
   eyebrow: string;
   headline: string;
   subhead: string;
@@ -87,4 +95,15 @@ export interface ProjectData {
   threadId?: string;
   version: number;
   lastSummary?: string;
+  /** True when Codex has edited the Web artifact beyond the structured template. */
+  webCustomized?: boolean;
+}
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  brandName: string;
+  industry: string;
+  updatedAt: string;
+  version: number;
 }

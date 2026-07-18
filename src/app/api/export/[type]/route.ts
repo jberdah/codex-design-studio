@@ -2,15 +2,15 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
-import { projectRoot } from "@/server/paths";
+import { activeProjectId, projectRoot } from "@/server/paths";
 import { generatePptx } from "@/server/slides";
 import { loadProject } from "@/server/store";
 
 export const runtime = "nodejs";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ type: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
-  const project = await loadProject();
+  const project = await loadProject(activeProjectId(request));
   if (type === "pptx") {
     const buffer = await generatePptx(project);
     return new NextResponse(new Uint8Array(buffer), { headers: { "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "content-disposition": `attachment; filename="${project.brand.name.toLowerCase()}-launch-deck.pptx"` } });

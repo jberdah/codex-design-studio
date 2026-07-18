@@ -1,11 +1,11 @@
 import { expect, test } from "@playwright/test";
 
 test.afterEach(async ({ request }) => {
-  await request.post("/api/project/reset");
+  await request.post("/api/project/reset?project=e2e");
 });
 
 test("refines a selected landing element and reviews the result", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/?project=e2e");
   await expect(page.getByText("Codex Design Studio")).toBeVisible();
   await expect(page.getByText("Codex connected")).toBeVisible();
 
@@ -24,8 +24,40 @@ test("refines a selected landing element and reviews the result", async ({ page 
 });
 
 test("shows the complete three-slide deck", async ({ page }) => {
-  await page.goto("/");
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await page.goto("/?project=e2e");
   await page.getByRole("button", { name: /Presentation/ }).click();
   await expect(page.locator(".slide-strip > div")).toHaveCount(3);
   await expect(page.locator(".slides-stage")).toContainText("Climate intelligence for decisions that matter");
+  const slide = await page.locator(".slides-stage > .slide-preview").boundingBox();
+  const workspace = await page.locator(".workspace").boundingBox();
+  expect(slide).not.toBeNull();
+  expect(workspace).not.toBeNull();
+  expect(slide!.x).toBeGreaterThanOrEqual(workspace!.x);
+  expect(slide!.x + slide!.width).toBeLessThanOrEqual(workspace!.x + workspace!.width);
+});
+
+test("adds visible icons to the selected navigation", async ({ page }) => {
+  await page.goto("/?project=e2e");
+  const preview = page.frameLocator('iframe[title="Generated landing page"]');
+  await preview.locator('[data-design-id="navigation"]').click();
+  await page.getByLabel("Refinement instruction").fill("Add icons to the menu items");
+  await page.getByLabel("Send instruction").click();
+  await expect(preview.locator("svg.nav-icon")).toHaveCount(3);
+  await expect(page.locator(".messages")).toContainText("monoline icons");
+});
+
+test("creates and opens an isolated brand project", async ({ page }) => {
+  await page.goto("/?project=e2e");
+  await page.getByRole("button", { name: /New project/ }).click();
+  const dialog = page.getByRole("dialog", { name: "Create a brand workspace" });
+  await dialog.getByLabel("Brand name").fill("Orbit E2E");
+  await dialog.getByLabel("Industry").fill("Design operations");
+  await dialog.getByLabel("Audience").fill("Creative teams");
+  await dialog.getByLabel("Brand promise").fill("Turn direction into tested artifacts.");
+  await dialog.getByRole("button", { name: "Create project" }).click();
+
+  await expect(page).toHaveURL(/project=orbit-e2e/);
+  await expect(page.getByLabel("Active project")).toHaveValue(/orbit-e2e/);
+  await expect(page.locator("iframe").contentFrame().getByRole("heading", { level: 1 })).toContainText("Turn direction into tested artifacts");
 });

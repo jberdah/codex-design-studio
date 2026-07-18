@@ -1,0 +1,4 @@
+interface:
+  display_name: "Web Art Director"
+  short_description: "Redesign and visually verify web deliverables"
+  default_prompt: "Use -art-director to redesign the selected web experience and verify it with Playwright screenshots."

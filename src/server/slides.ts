@@ -31,7 +31,11 @@ function addValue(slide: PptxGenJS.Slide, project: ProjectData, spec: SlideSpec)
     slide.addText(bullet, { x: 1.25, y, w: 5.75, h: 0.42, fontFace: typography.body, fontSize: 16, color: hex(colors.text), margin: 0 });
   });
   slide.addShape("roundRect", { x: 8.25, y: 1.2, w: 4.2, h: 4.95, rectRadius: 0.1, fill: { color: hex(colors.primary) }, line: { transparency: 100 } });
-  slide.addShape("arc", { x: 9.1, y: 2.05, w: 2.5, h: 2.5, rotate: 18, fill: { color: hex(colors.accent), transparency: 5 }, line: { transparency: 100 } });
+  slide.addText("DECISION LOOP", { x: 8.75, y: 1.62, w: 2.2, h: 0.22, fontFace: typography.body, fontSize: 8, bold: true, color: hex(colors.accent), charSpacing: 1.8, margin: 0 });
+  slide.addShape("ellipse", { x: 9.05, y: 2.02, w: 2.35, h: 2.35, fill: { color: hex(colors.primary), transparency: 100 }, line: { color: hex(colors.accent), width: 2, transparency: 5 } });
+  slide.addShape("ellipse", { x: 9.68, y: 2.65, w: 1.08, h: 1.08, fill: { color: hex(colors.secondary), transparency: 2 }, line: { transparency: 100 } });
+  slide.addShape("ellipse", { x: 10.92, y: 2.27, w: 0.28, h: 0.28, fill: { color: hex(colors.accent) }, line: { transparency: 100 } });
+  slide.addShape("line", { x: 8.8, y: 4.45, w: 3.05, h: 0, line: { color: "FFFFFF", transparency: 70, width: 1 } });
   slide.addText("From signal\nto action", { x: 8.8, y: 4.7, w: 3.1, h: 0.8, fontFace: typography.display, fontSize: 24, color: "FFFFFF", margin: 0, breakLine: false });
 }
 

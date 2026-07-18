@@ -1,5 +1,8 @@
 node_modules/
 .next/
+desktop-runtime/
+out/
+.e2e-workspace/
 playwright-report/
 test-results/
 coverage/
@@ -10,7 +13,8 @@ claude-desktop-asar.zip
 .brainclaw/
 projects/*/history/
 projects/*/exports/
-projects/*/reviews/latest.json
+projects/*/reviews/
+projects/e2e/
 !projects/demo/history/.gitkeep
 !projects/demo/exports/.gitkeep
 

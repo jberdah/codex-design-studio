@@ -1,25 +1,25 @@
 # Three-minute demo script
 
-## 0:00–0:25 — Problem and promise
+## 0:00–0:25 — Desktop and account
 
-“Brand teams define a visual identity once, then manually reproduce it across every deliverable. Codex Design Studio turns that identity into an executable source of truth.” Show the Asteria project, the live landing, and the connected local Codex runtime.
+Open the packaged Codex Design Studio application. Show the connected ChatGPT account and explain that the desktop app embeds Codex and Playwright while keeping credentials in Codex’s credential store.
 
-## 0:25–1:05 — One system, multiple outputs
+## 0:25–0:55 — Create a project
 
-Open **Design system** and show the named color and typography tokens. Change one color, click **Apply tokens**, then switch between **Landing page** and **Presentation** to show both formats using the same source.
+Click **New project**, enter a brand, industry, audience, and promise, then create it. Switch once through the project selector to demonstrate isolated multi-project persistence.
 
-## 1:05–1:50 — Contextual Codex refinement
+## 0:55–1:45 — Direct the real design
 
-On the landing page, click the hero description inside the preview. Point out the attached element ID and viewport in the assistant panel. Ask: “Make this more premium and concise.” Show the Codex summary, new token version, and regenerated web and slide sources.
+Open **Landing page** and select the navigation directly in the preview. Ask: “Turn this into a distinctive editorial command bar with accessible monoline icons and a strong mobile composition.” Explain that Codex can edit the actual HTML/CSS/SVG rather than only token fields.
 
-## 1:50–2:20 — Trust and quality
+## 1:45–2:15 — Visual proof
 
-Click **Review**. Show the deterministic 100/100 checks for tokens, contrast, landing structure, deck structure, and overflow risk. Explain that Codex proposes a strict semantic patch in a read-only sandbox while the host validates and persists it.
+When the result appears, point out the visible icons and changed layout. Show the visual-review metadata: desktop/mobile dimensions, pixel difference, and no overflow. Mention that a failed or broken proposal is rolled back transactionally.
 
-## 2:20–2:50 — Real deliverables
+## 2:15–2:40 — Shared system and review
 
-Open **Export** and download the landing ZIP, tokens JSON, and editable PPTX. Open the deck briefly in PowerPoint or Keynote and edit a title to prove it contains native elements rather than screenshots.
+Open **Design system** and the presentation to show that shared brand data and editable deck still coexist with a freely composed Web artifact. Run **Review** and inspect the deterministic checks.
 
-## 2:50–3:00 — Close
+## 2:40–3:00 — Ship
 
-“One brand system, refined with Codex, shipped everywhere.” Mention the local-first architecture and the future extension to documents and asset production.
+Export the responsive HTML ZIP, token JSON, and editable PPTX. Close with: “One local desktop workspace, one connected Codex, and every design change proven in the pixels before it ships.”

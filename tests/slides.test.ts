@@ -11,7 +11,10 @@ describe("editable PowerPoint export", () => {
     expect(buffer.byteLength).toBeGreaterThan(20_000);
     expect(slideFiles).toHaveLength(3);
     const coverXml = await zip.file("ppt/slides/slide1.xml")!.async("string");
+    const valueXml = await zip.file("ppt/slides/slide2.xml")!.async("string");
     expect(coverXml).toContain("Climate intelligence for decisions that matter");
     expect(coverXml).toContain("<a:t>");
+    expect(valueXml).toContain("DECISION LOOP");
+    expect(valueXml).toContain("From signal");
   });
 });

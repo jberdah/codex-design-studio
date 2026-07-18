@@ -36,6 +36,14 @@ export const defaultProject: ProjectData = {
     voice: { attributes: ["clear", "confident", "non-technical"], forbiddenPatterns: ["game-changing", "revolutionary"] }
   },
   landing: {
+    navigation: {
+      showIcons: false,
+      items: [
+        { label: "Platform", icon: "layers" },
+        { label: "Approach", icon: "compass" },
+        { label: "Insights", icon: "chart" }
+      ]
+    },
     eyebrow: "Climate intelligence, clarified",
     headline: "See the signal. Shape what comes next.",
     subhead: "Asteria turns scattered operational data into a clear, shared path toward measurable climate progress.",

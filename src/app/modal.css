@@ -1,0 +1,86 @@
+.project-tile select {
+  width: 132px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  outline: 0;
+  padding: 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #16131d66;
+  backdrop-filter: blur(7px);
+}
+
+.project-modal {
+  width: min(560px, 100%);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 30px 100px #17131e55;
+}
+
+.modal-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-heading small { font-size: 8px; letter-spacing: .15em; color: var(--violet); }
+.modal-heading h2 { font: 32px/1.05 Georgia, serif; margin: 8px 0; }
+.modal-heading p { margin: 0; color: var(--muted); font-size: 12px; }
+.modal-heading > button { align-self: flex-start; width: 30px; height: 30px; border: 0; border-radius: 8px; background: var(--panel); color: var(--muted); }
+
+.modal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 22px; }
+.modal-form label { display: grid; gap: 6px; color: #625d68; font-size: 10px; font-weight: 650; }
+.modal-form label:nth-child(n+3) { grid-column: span 2; }
+.modal-form input, .modal-form textarea { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; outline: 0; background: #fcfbfd; font-size: 12px; }
+.modal-form textarea { height: 75px; resize: vertical; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.modal-actions .primary-button:disabled { opacity: .4; cursor: not-allowed; }
+
+.account-button { height: 34px; max-width: 190px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: white; border-radius: 9px; padding: 0 11px; color: #4f4c55; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.account-button > span { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #aaa5ae; }
+.account-button > span.connected { background: #56b98a; box-shadow: 0 0 0 3px #e4f5ec; }
+.account-summary { margin-top: 22px; display: flex; align-items: center; gap: 12px; padding: 16px; background: #f7f6f8; border: 1px solid var(--line); border-radius: 12px; }
+.account-mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: #dff4e8; color: #25754c; font-weight: 800; }
+.account-summary > div { display: grid; gap: 3px; }
+.account-summary strong { font-size: 12px; }
+.account-summary small { font-size: 10px; color: var(--muted); }
+.account-summary button { margin-left: auto; }
+.account-options { display: grid; gap: 17px; margin-top: 22px; }
+.chatgpt-login { width: 100%; display: flex; align-items: center; gap: 12px; border: 1px solid #dcd7e4; background: #f9f8fa; border-radius: 12px; padding: 15px; text-align: left; }
+.chatgpt-login > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: var(--ink); color: white; }
+.chatgpt-login > div { display: grid; gap: 3px; }
+.chatgpt-login strong { font-size: 12px; }
+.chatgpt-login small { font-size: 9px; color: var(--muted); }
+.chatgpt-login b { margin-left: auto; }
+.account-divider { display: flex; align-items: center; gap: 10px; color: #99949f; font-size: 9px; }
+.account-divider::before, .account-divider::after { content: ""; height: 1px; flex: 1; background: var(--line); }
+.account-options > label { display: grid; gap: 7px; color: #625d68; font-size: 10px; font-weight: 650; }
+.account-options > label > div { display: flex; gap: 7px; }
+.account-options input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; font-size: 12px; }
+.account-options label button { border: 0; border-radius: 9px; padding: 0 14px; background: var(--ink); color: white; font-size: 10px; }
+.account-options label button:disabled { opacity: .4; }
+.account-options label > small { color: var(--muted); font-weight: 400; }
+
+/* Slide typography must scale from each 16:9 canvas, never from the monitor viewport. */
+.slide-preview { container-type: inline-size; }
+.slides-canvas, .slides-stage { min-width: 0; max-width: 100%; }
+.slides-stage { container-type: size; width: 100%; }
+.slides-stage > .slide-preview { width: min(850px, 90%, 160cqh); }
+.slide-strip { max-width: 100%; overflow-x: auto; justify-content: center; padding: 4px; }
+.slide-strip > div { flex: 0 1 190px; min-width: 120px; }
+.slide-art::before { content: ""; position: absolute; width: 47%; aspect-ratio: 1; left: 26%; top: 13%; border: .35cqw solid var(--a); border-radius: 50%; }
+.slide-art::after { content: ""; position: absolute; width: 9%; aspect-ratio: 1; right: 18%; top: 20%; background: var(--a); border-radius: 50%; box-shadow: -2.6cqw 2.5cqw 0 1.1cqw var(--s); }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ProjectData, ReviewReport, SelectionContext } from "@/domain/types";
+import type { ProjectData, ProjectSummary, ReviewReport, SelectionContext } from "@/domain/types";
 import { SlidePreview } from "./SlidePreview";
 
 type Surface = "brand" | "system" | "web" | "slides";
 type ApiProject = { project: ProjectData; landingHtml: string };
+type AccountState = { account: null | { type: "apiKey" } | { type: "chatgpt"; email: string | null; planType: string }; requiresOpenaiAuth: boolean };
 
 const nav: Array<{ id: Surface; label: string; glyph: string }> = [
   { id: "brand", label: "Brand", glyph: "✦" },
@@ -17,6 +18,13 @@ const nav: Array<{ id: Surface; label: string; glyph: string }> = [
 export function Studio() {
   const previewRef = useRef<HTMLIFrameElement>(null);
   const [data, setData] = useState<ApiProject | null>(null);
+  const [projectId, setProjectId] = useState("demo");
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
+  const [account, setAccount] = useState<AccountState>();
+  const [apiKey, setApiKey] = useState("");
+  const [newProject, setNewProject] = useState({ brandName: "", industry: "", audience: "", promise: "" });
   const [surface, setSurface] = useState<Surface>("web");
   const [selection, setSelection] = useState<SelectionContext>();
   const [instruction, setInstruction] = useState("Make this hero feel more premium and concise");
@@ -30,14 +38,18 @@ export function Studio() {
     { role: "assistant", text: "Your brand system is ready. Select anything in the landing preview, then describe what should change." }
   ]);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/project", { cache: "no-store" });
+  const load = useCallback(async (id: string) => {
+    const response = await fetch(`/api/project?project=${encodeURIComponent(id)}`, { cache: "no-store" });
     if (!response.ok) throw new Error("Could not load the demo project.");
     setData(await response.json() as ApiProject);
   }, []);
 
   useEffect(() => {
-    load().catch((error) => setToast(error.message));
+    const initialProject = new URL(window.location.href).searchParams.get("project") ?? "demo";
+    setProjectId(initialProject);
+    load(initialProject).catch((error) => setToast(error.message));
+    fetch("/api/projects", { cache: "no-store" }).then((response) => response.json()).then((result) => setProjects(result.projects ?? [])).catch(() => undefined);
+    fetch("/api/account", { cache: "no-store" }).then((response) => response.json()).then(setAccount).catch(() => setAccount({ account: null, requiresOpenaiAuth: true }));
     fetch("/api/agent/status").then((response) => response.json()).then(setAgent).catch(() => undefined);
   }, [load]);
 
@@ -55,15 +67,16 @@ export function Studio() {
   }, []);
 
   const project = data?.project;
+  const apiForProject = (pathname: string) => `${pathname}?project=${encodeURIComponent(projectId)}`;
   const updateProject = (updater: (project: ProjectData) => ProjectData) => setData((current) => current ? { ...current, project: updater(structuredClone(current.project)) } : current);
 
   async function saveSystem() {
     if (!project) return;
     setBusy("Saving brand system");
     try {
-      const response = await fetch("/api/project", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ brand: project.brand, tokens: project.tokens, landing: project.landing }) });
+      const response = await fetch(apiForProject("/api/project"), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ brand: project.brand, tokens: project.tokens, landing: project.landing }) });
       setData(await response.json() as ApiProject);
-      setToast("Brand system saved and propagated to web + slides.");
+      setToast(project.webCustomized ? "Brand system saved; custom Web composition preserved." : "Brand system saved and propagated to web + slides.");
     } finally { setBusy(undefined); }
   }
 
@@ -75,12 +88,15 @@ export function Studio() {
     setBusy("Codex is analysing the selected context");
     try {
       const mode = process.env.NEXT_PUBLIC_CODEX_STUDIO_MODE === "fallback" ? "fallback" : "auto";
-      const response = await fetch("/api/refine", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instruction: request, selection, mode }) });
+      const response = await fetch(apiForProject("/api/refine"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instruction: request, selection, deliverable: surface, mode }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Refinement failed");
       setData({ project: result.project, landingHtml: result.landingHtml });
-      setMessages((current) => [...current, { role: "assistant", text: `${result.summary} ${result.source === "codex" ? "Applied by Codex." : "Applied with the reliable demo fallback."}` }]);
-      setToast(result.warning ?? `${result.filesModified.length} source files updated.`);
+      const assistantText = result.changed === false
+        ? `${result.unsupportedReason ?? result.summary} No source change was applied.`
+        : `${result.summary} ${result.source === "codex" ? "Applied and visually checked by Codex." : "Applied with the reliable demo fallback."}`;
+      setMessages((current) => [...current, { role: "assistant", text: assistantText }]);
+      setToast(result.warning ?? (result.changed === false ? "No supported source change." : `${result.filesModified.length} source files updated.`));
     } catch (error) {
       setMessages((current) => [...current, { role: "assistant", text: error instanceof Error ? error.message : "Refinement failed." }]);
     } finally { setBusy(undefined); }
@@ -89,7 +105,7 @@ export function Studio() {
   async function runReview() {
     setBusy("Checking brand consistency");
     try {
-      const response = await fetch("/api/review", { method: "POST" });
+      const response = await fetch(apiForProject("/api/review"), { method: "POST" });
       const report = await response.json() as ReviewReport;
       setReview(report);
       setToast(`Review complete · ${report.score}/100`);
@@ -97,11 +113,64 @@ export function Studio() {
   }
 
   async function reset() {
-    setBusy("Restoring demo project");
-    const response = await fetch("/api/project/reset", { method: "POST" });
+    setBusy("Restoring project");
+    const response = await fetch(apiForProject("/api/project/reset"), { method: "POST" });
     setData(await response.json() as ApiProject);
-    setSelection(undefined); setReview(undefined); setMessages([{ role: "assistant", text: "Demo restored. The original Asteria brand system is ready." }]);
-    setBusy(undefined); setToast("Demo project restored.");
+    setSelection(undefined); setReview(undefined); setMessages([{ role: "assistant", text: "Project restored. Its initial brand system and deliverables are ready." }]);
+    setBusy(undefined); setToast("Project restored.");
+  }
+
+  async function switchProject(id: string) {
+    setProjectId(id);
+    window.history.replaceState({}, "", `/?project=${encodeURIComponent(id)}`);
+    setData(null); setSelection(undefined); setReview(undefined);
+    await load(id);
+  }
+
+  async function createNewProject() {
+    setBusy("Creating project");
+    try {
+      const response = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(newProject) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not create the project.");
+      const summary: ProjectSummary = { id: result.project.id, name: result.project.name, brandName: result.project.brand.name, industry: result.project.brand.industry, updatedAt: result.project.updatedAt, version: result.project.version };
+      setProjects((current) => [summary, ...current]);
+      setShowNewProject(false); setNewProject({ brandName: "", industry: "", audience: "", promise: "" });
+      await switchProject(result.project.id);
+      setToast(`${result.project.brand.name} project created.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not create the project."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function refreshAccount() {
+    const response = await fetch("/api/account", { cache: "no-store" });
+    const state = await response.json() as AccountState;
+    setAccount(state);
+    return state;
+  }
+
+  async function connectAccount(action: "login" | "apiKey") {
+    setBusy(action === "login" ? "Opening OpenAI sign-in" : "Connecting API key");
+    try {
+      const response = await fetch("/api/account", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action, apiKey: action === "apiKey" ? apiKey : undefined }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not start sign-in.");
+      if (result.authUrl) window.open(result.authUrl, "_blank", "noopener,noreferrer");
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        const state = await refreshAccount();
+        if (state.account) {
+          setShowAccount(false); setApiKey(""); setToast("OpenAI account connected.");
+          break;
+        }
+      }
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not connect the account."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function disconnectAccount() {
+    await fetch("/api/account", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "logout" }) });
+    await refreshAccount(); setShowAccount(false); setToast("OpenAI account disconnected.");
   }
 
   const surfaceTitle = useMemo(() => nav.find((item) => item.id === surface)?.label ?? "Studio", [surface]);
@@ -112,14 +181,16 @@ export function Studio() {
       <div className="wordmark"><span>✦</span><strong>Codex</strong> Design Studio</div>
       <div className="project-crumb"><span className="status-dot"/>{project.name}<span>·</span><small>v{project.tokens.version}</small></div>
       <div className="top-actions">
-        <button className="ghost-button" onClick={reset}>Restore demo</button>
+        <button className="account-button" onClick={() => setShowAccount(true)}><span className={account?.account ? "connected" : ""}/>{account?.account?.type === "chatgpt" ? account.account.email ?? account.account.planType : account?.account?.type === "apiKey" ? "API account" : "Connect OpenAI"}</button>
+        <button className="ghost-button" onClick={() => setShowNewProject(true)}>＋ New project</button>
+        <button className="ghost-button" onClick={reset}>Restore project</button>
         <button className="ghost-button" onClick={runReview}>✓ Review</button>
-        <div className="export-menu"><span>Export</span><div><a href="/api/export/web">Landing ZIP</a><a href="/api/export/pptx">Editable PPTX</a><a href="/api/export/tokens">Tokens JSON</a></div></div>
+        <div className="export-menu"><span>Export</span><div><a href={apiForProject("/api/export/web")}>Landing ZIP</a><a href={apiForProject("/api/export/pptx")}>Editable PPTX</a><a href={apiForProject("/api/export/tokens")}>Tokens JSON</a></div></div>
       </div>
     </header>
     <div className="studio-grid">
       <aside className="sidebar">
-        <div className="project-tile"><div className="project-avatar">A</div><div><strong>{project.brand.name}</strong><span>{project.brand.industry}</span></div></div>
+        <div className="project-tile"><div className="project-avatar">{project.brand.name.slice(0, 1).toUpperCase()}</div><div><select aria-label="Active project" value={projectId} onChange={(event) => switchProject(event.target.value)}>{projects.map((item) => <option value={item.id} key={item.id}>{item.brandName}</option>)}</select><span>{project.brand.industry}</span></div></div>
         <nav>{nav.map((item) => <button key={item.id} className={surface === item.id ? "current" : ""} onClick={() => setSurface(item.id)}><span>{item.glyph}</span>{item.label}{item.id === "web" && <i>Live</i>}</button>)}</nav>
         <div className="side-bottom"><div className="agent-state"><span className="agent-pulse"/><div><strong>{agent?.available ? "Codex connected" : "Checking Codex"}</strong><small>{agent ? `${agent.model} · CLI ${agent.cliVersion}` : "App Server"}</small></div></div></div>
       </aside>
@@ -149,5 +220,7 @@ export function Studio() {
     </div>
     {review && <div className="review-drawer"><div className="review-score"><span>{review.score}</span><div><small>BRAND HEALTH</small><strong>{review.score >= 90 ? "Ready to ship" : "Needs attention"}</strong></div><button onClick={() => setReview(undefined)}>×</button></div>{review.checks.map((check) => <div className={`review-item ${check.status}`} key={check.id}><b>{check.status === "pass" ? "✓" : check.status === "warning" ? "!" : "×"}</b><div><strong>{check.label}</strong><span>{check.message}</span></div></div>)}</div>}
     {toast && <button className="toast" onClick={() => setToast(undefined)}>{toast}<span>×</span></button>}
+    {showNewProject && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewProject(false); }}><section className="project-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-title"><div className="modal-heading"><div><small>NEW PROJECT</small><h2 id="new-project-title">Create a brand workspace</h2><p>The Studio will create a tailored initial system, landing page and launch deck for Codex to direct.</p></div><button aria-label="Close" onClick={() => setShowNewProject(false)}>×</button></div><div className="modal-form"><label>Brand name<input autoFocus value={newProject.brandName} onChange={(event) => setNewProject((current) => ({ ...current, brandName: event.target.value }))} placeholder="Northstar"/></label><label>Industry<input value={newProject.industry} onChange={(event) => setNewProject((current) => ({ ...current, industry: event.target.value }))} placeholder="Financial infrastructure"/></label><label>Audience<input value={newProject.audience} onChange={(event) => setNewProject((current) => ({ ...current, audience: event.target.value }))} placeholder="Finance leaders in scaling companies"/></label><label>Brand promise<textarea value={newProject.promise} onChange={(event) => setNewProject((current) => ({ ...current, promise: event.target.value }))} placeholder="Turn complexity into confident decisions."/></label></div><div className="modal-actions"><button className="ghost-button" onClick={() => setShowNewProject(false)}>Cancel</button><button className="primary-button" disabled={Object.values(newProject).some((value) => !value.trim()) || Boolean(busy)} onClick={createNewProject}>Create project</button></div></section></div>}
+    {showAccount && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAccount(false); }}><section className="project-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="account-title"><div className="modal-heading"><div><small>OPENAI ACCOUNT</small><h2 id="account-title">{account?.account ? "Codex is connected" : "Connect Codex"}</h2><p>{account?.account ? "Your credentials stay in the Codex keychain and are never stored by the project." : "Use your ChatGPT subscription or an OpenAI Platform API key."}</p></div><button aria-label="Close" onClick={() => setShowAccount(false)}>×</button></div>{account?.account ? <div className="account-summary"><span className="account-mark">✓</span><div><strong>{account.account.type === "chatgpt" ? account.account.email ?? "ChatGPT account" : "OpenAI API key"}</strong><small>{account.account.type === "chatgpt" ? `${account.account.planType} plan` : "Usage-based billing"}</small></div><button className="ghost-button" onClick={disconnectAccount}>Sign out</button></div> : <div className="account-options"><button className="chatgpt-login" onClick={() => connectAccount("login")} disabled={Boolean(busy)}><span>✦</span><div><strong>Continue with ChatGPT</strong><small>Use your Codex subscription and workspace access</small></div><b>→</b></button><div className="account-divider"><span>or use an API key</span></div><label>OpenAI API key<div><input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-…"/><button onClick={() => connectAccount("apiKey")} disabled={!apiKey.trim() || Boolean(busy)}>Connect</button></div><small>The key is passed directly to the local Codex login flow.</small></label></div>}</section></div>}
   </main>;
 }

@@ -20,4 +20,13 @@ describe("landing renderer", () => {
     expect(html).not.toContain('<script>alert("x")</script>');
     expect(html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
   });
+
+  it("renders accessible inline navigation icons when enabled", () => {
+    const project = structuredClone(defaultProject);
+    project.landing.navigation.showIcons = true;
+    const html = renderLandingHtml(project);
+    expect(html.match(/class="nav-icon"/g)).toHaveLength(3);
+    expect(html.match(/aria-hidden="true"/g)).toHaveLength(3);
+    expect(html).toContain("<span>Platform</span>");
+  });
 });

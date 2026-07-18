@@ -8,28 +8,44 @@ Final local verification was completed on 18 July 2026 in Europe/Paris.
 - npm `10.9.8`
 - project-local Codex CLI `0.144.5`
 - Codex model `gpt-5.6-sol`
-- authentication: ChatGPT login, confirmed by `npm run preflight`
+- Electron `43.1.1`
+- Playwright `1.55.1`
+- authentication: ChatGPT Plus account confirmed through `account/read`
 
-## Codex App Server evidence
+## Live creative-edit evidence
 
-`npm run test:agent` completed two live structured refinements through the App Server and confirmed that the second turn resumed the first thread.
+A project-isolated Web turn changed the real HTML, retained the selection bridge, produced three monoline navigation SVGs, and completed with App Server thread `019f757b-9a8f-7ed3-8c6c-aeefb1fe0328`.
 
-- source: `codex`
-- thread ID: `019f753a-8158-7d83-96ee-c879df7866ce`
-- resumed: `true`
-- final result: shared visual direction updated and propagated to web and slides
+Corrected visual evidence:
 
-The smoke script restores the reference project after completion, so this durable record intentionally lives outside mutable demo data.
+- desktop: 1440×1000, no horizontal overflow, `15.8856%` pixel difference;
+- mobile: 390×844, no horizontal overflow, `40.9029%` pixel difference.
+
+## Packaged desktop evidence
+
+The unpacked macOS x64 application was created at `out/Codex Design Studio-darwin-x64/Codex Design Studio.app` and launched with an isolated temporary workspace.
+
+From the packaged runtime—not the development checkout—the verification confirmed:
+
+- embedded Next.js home returned HTTP 200 with its static assets;
+- bundled Codex CLI was available;
+- the ChatGPT account was readable;
+- a new project was created;
+- a Web turn completed with thread `019f7586-547c-78c0-8b43-c750617c6c58`;
+- three navigation icons and `webCustomized: true` were persisted;
+- desktop pixel difference `5.6837%`, mobile `20.6951%`, neither overflowing.
+
+The final unpacked application is approximately 831 MB. Its ASAR contains only the desktop entry point and manifest; the user-provided proprietary reference archive and all development projects are excluded. The verified media are a 376 MB DMG and a 328 MB ZIP.
+
+The editable PPTX was also rendered slide-by-slide through macOS Quick Look. All three 16:9 layouts rendered correctly; the value slide’s editable decision-loop geometry was verified after refinement. The Studio preview was captured at 1510×960 and 1100×760, with the main slide fully contained in the workspace at both sizes.
 
 ## Automated evidence
 
-`npm run check:all` passed from the workspace and after a clean local clone with `npm ci`:
+- 14 Vitest unit/renderer checks passed.
+- 4 Chromium journeys passed: contextual refinement/review, complete slide deck, visible navigation icons, and isolated project creation.
+- TypeScript generation and typecheck passed.
+- Next.js standalone production build passed with all application routes.
+- Both repository skills passed the Codex skill validator.
+- `npm audit --omit=dev` is used for runtime dependencies; current Electron Forge development tooling reports upstream-only advisories separately.
 
-- TypeScript route generation and strict typecheck
-- 12 Vitest checks across refinement, review, rendering, path boundaries, App Server output parsing, and editable PPTX generation
-- Next.js 16 production build with all application and API routes
-- 2 Chromium journeys covering contextual iframe selection, deterministic refinement, propagation, 100/100 review, and the complete three-slide deck
-- `npm audit`: 0 known vulnerabilities
-- both Codex skills: valid according to the Codex skill validator
-
-Git commits `f5df12a` and `f9e402d` preserve the implementation and reproducibility checkpoints. The proprietary desktop reference archive is excluded from Git and no source or assets from it are included.
+The E2E suite uses `.e2e-workspace`, and live creative tests used temporary directories, so the user’s `projects/demo` changes were not reset or overwritten.

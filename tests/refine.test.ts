@@ -26,7 +26,7 @@ describe("brand refinement", () => {
       viewport: "desktop"
     });
     expect(result.source).toBe("fallback");
-    expect(result.project.landing.subhead).toBe("Turn climate data into decisions your teams can act on.");
+    expect(result.project.landing.subhead).toBe("Asteria turns complexity into decisions your teams can act on.");
     expect(result.project.landing.headline).toBe(defaultProject.landing.headline);
   });
 
@@ -34,5 +34,20 @@ describe("brand refinement", () => {
     const result = fallbackRefinement(structuredClone(defaultProject), "Make it warmer");
     expect(result.project.tokens.colors.primary).toBe("#522D26");
     expect(result.summary).toMatch(/terracotta/i);
+  });
+
+  it("adds real navigation icon settings and stays truthful for unsupported edits", () => {
+    const iconResult = fallbackRefinement(structuredClone(defaultProject), "Ajoute des icônes aux éléments du menu", {
+      deliverableId: "web", designId: "navigation", label: "Navigation", domPath: "nav[data-design-id=navigation]", text: "Platform Approach Insights", viewport: "desktop"
+    });
+    expect(iconResult.changed).toBe(true);
+    expect(iconResult.project.landing.navigation.showIcons).toBe(true);
+    expect(iconResult.project.landing.navigation.items.map((item) => item.icon)).toEqual(["layers", "compass", "chart"]);
+
+    const unsupported = fallbackRefinement(structuredClone(defaultProject), "Add a 3D product configurator");
+    expect(unsupported.changed).toBe(false);
+    expect(unsupported.filesModified).toEqual([]);
+    expect(unsupported.unsupportedReason).toMatch(/cannot yet/i);
+    expect(unsupported.project.version).toBe(defaultProject.version);
   });
 });
