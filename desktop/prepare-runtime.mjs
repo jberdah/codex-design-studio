@@ -1,5 +1,6 @@
-import { access, cp, mkdir, rm } from "node:fs/promises";
+import { access, cp, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
+import runtimePolicy from "./runtime-policy.json" with { type: "json" };
 
 const root = process.cwd();
 const output = path.join(root, "desktop-runtime");
@@ -15,8 +16,33 @@ async function copyRequired(source, destination) {
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
 
-await copyRequired(path.join(root, ".next", "standalone"), serverOutput);
+const standalone = path.join(root, ".next", "standalone");
+const standaloneEntries = new Set(await readdir(standalone));
+
+for (const entry of runtimePolicy.requiredServerEntries) {
+  if (!standaloneEntries.has(entry)) {
+    throw new Error(`Next standalone output is missing required entry: ${entry}`);
+  }
+}
+
+// Next can conservatively trace the entire repository when server modules use
+// dynamic filesystem paths. Copy only the runtime contract instead of shipping
+// source files, Git metadata, Brainclaw memory, local materials, or test output.
+await mkdir(serverOutput, { recursive: true });
+for (const entry of runtimePolicy.serverEntries) {
+  if (standaloneEntries.has(entry)) {
+    await copyRequired(path.join(standalone, entry), path.join(serverOutput, entry));
+  }
+}
+
 await copyRequired(path.join(root, ".next", "static"), path.join(serverOutput, ".next", "static"));
+
+const unexpectedServerEntries = (await readdir(serverOutput)).filter(
+  (entry) => !runtimePolicy.serverEntries.includes(entry)
+);
+if (unexpectedServerEntries.length > 0) {
+  throw new Error(`Unexpected desktop server runtime entries: ${unexpectedServerEntries.join(", ")}`);
+}
 
 // Next's conservative file tracing can retain the development Electron package
 // in the standalone server. The desktop shell already provides Electron, while
