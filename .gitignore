@@ -10,6 +10,7 @@ coverage/
 *.log
 *.tsbuildinfo
 .local-reference-assets/
+.local-project-materials/
 .brainclaw/
 projects/*/history/
 projects/*/exports/

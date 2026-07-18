@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingExcludes: {
     "/*": [
+      "./.git/**/*",
       "./desktop-runtime/**/*",
       "./out/**/*",
       "./projects/**/*",
@@ -11,7 +12,8 @@ const nextConfig: NextConfig = {
       "./desktop/**/*",
       "./tests/**/*",
       "./docs/**/*",
-      "./.local-reference-assets/**/*"
+      "./.local-reference-assets/**/*",
+      "./.local-project-materials/**/*"
     ]
   },
   // The local browser bridge exposes localhost through this loopback alias.
