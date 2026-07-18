@@ -6,7 +6,7 @@ import path from "node:path";
 import readline from "node:readline";
 import type { ProjectData, SelectionContext } from "@/domain/types";
 import type { ProjectPatch } from "./refine";
-import { bundleRoot, codexEntrypoint, projectRoot } from "./paths";
+import { bundleRoot, codexEntrypoint, safeProjectPath, safeProjectRoot } from "./paths";
 
 type RpcMessage = { id?: number; method?: string; result?: unknown; error?: { message?: string }; params?: Record<string, unknown> };
 
@@ -132,8 +132,8 @@ function validEditableLanding(content: string) {
 }
 
 export async function runCodexWebRefinement(project: ProjectData, instruction: string, selection?: SelectionContext): Promise<WebRefinementResult> {
-  const root = projectRoot(project.id);
-  const landingPath = path.join(root, "web", "index.html");
+  const root = await safeProjectRoot(project.id);
+  const landingPath = await safeProjectPath(project.id, "web", "index.html");
   const before = await readFile(landingPath, "utf8");
   const connection = new AppServerConnection();
   let output = "";
@@ -179,12 +179,13 @@ export async function runCodexWebRefinement(project: ProjectData, instruction: s
 }
 
 export async function runCodexRefinement(project: ProjectData, instruction: string, selection?: SelectionContext): Promise<{ patch: ProjectPatch; threadId: string }> {
+  const root = await safeProjectRoot(project.id);
   const connection = new AppServerConnection();
   let output = "";
   try {
     await connection.request("initialize", { clientInfo: { name: "codex-design-studio", title: "Codex Design Studio", version: "0.1.0" }, capabilities: { experimentalApi: true } });
     connection.notify("initialized");
-    const threadSettings = { cwd: projectRoot(project.id), model: studioModel(), approvalPolicy: "never", sandbox: "read-only", developerInstructions: "You are the brand refinement engine inside Codex Design Studio. Apply the workflow in ../../skills/brand-studio/SKILL.md. Return only the requested structured patch. Never claim a change unless it is represented by a non-null patch field. Use unsupportedReason when the safe contract cannot express the request. Preserve accessibility and specificity." };
+    const threadSettings = { cwd: root, model: studioModel(), approvalPolicy: "never", sandbox: "read-only", developerInstructions: "You are the brand refinement engine inside Codex Design Studio. Apply the workflow in ../../skills/brand-studio/SKILL.md. Return only the requested structured patch. Never claim a change unless it is represented by a non-null patch field. Use unsupportedReason when the safe contract cannot express the request. Preserve accessibility and specificity." };
     let threadResponse: { thread: { id: string } };
     if (project.threadId) {
       try {

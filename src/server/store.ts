@@ -1,9 +1,8 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-import path from "node:path";
 import { defaultProject } from "@/domain/defaults";
 import type { ProjectData, ProjectSummary } from "@/domain/types";
-import { projectRoot, projectsRoot } from "./paths";
+import { safeProjectPath, safeProjectRoot, safeProjectsRoot } from "./paths";
 import { renderLandingHtml, tokensToCss } from "./landing";
 
 async function writeJsonAtomic(filePath: string, value: unknown) {
@@ -13,18 +12,19 @@ async function writeJsonAtomic(filePath: string, value: unknown) {
 }
 
 export async function ensureProject(projectId = "demo") {
-  const root = projectRoot(projectId);
-  await Promise.all([
-    mkdir(path.join(root, "brand"), { recursive: true }),
-    mkdir(path.join(root, "design-system"), { recursive: true }),
-    mkdir(path.join(root, "web"), { recursive: true }),
-    mkdir(path.join(root, "slides", "preview"), { recursive: true }),
-    mkdir(path.join(root, "reviews"), { recursive: true }),
-    mkdir(path.join(root, "exports"), { recursive: true }),
-    mkdir(path.join(root, "history"), { recursive: true })
+  const root = await safeProjectRoot(projectId);
+  const directories = await Promise.all([
+    safeProjectPath(projectId, "brand"),
+    safeProjectPath(projectId, "design-system"),
+    safeProjectPath(projectId, "web"),
+    safeProjectPath(projectId, "slides", "preview"),
+    safeProjectPath(projectId, "reviews"),
+    safeProjectPath(projectId, "exports"),
+    safeProjectPath(projectId, "history")
   ]);
+  await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })));
   try {
-    await readFile(path.join(root, "project.json"), "utf8");
+    await readFile(await safeProjectPath(projectId, "project.json"), "utf8");
   } catch {
     const initial = structuredClone(defaultProject);
     initial.id = projectId;
@@ -35,8 +35,8 @@ export async function ensureProject(projectId = "demo") {
 }
 
 export async function loadProject(projectId = "demo"): Promise<ProjectData> {
-  const root = await ensureProject(projectId);
-  const project = JSON.parse(await readFile(path.join(root, "project.json"), "utf8")) as ProjectData;
+  await ensureProject(projectId);
+  const project = JSON.parse(await readFile(await safeProjectPath(projectId, "project.json"), "utf8")) as ProjectData;
   if (!project.landing.navigation) {
     const priorIntent = `${project.lastSummary ?? ""} ${project.brand.visualDirection}`;
     project.landing.navigation = structuredClone(defaultProject.landing.navigation);
@@ -47,19 +47,19 @@ export async function loadProject(projectId = "demo"): Promise<ProjectData> {
 }
 
 export async function loadLandingHtml(projectId = "demo") {
-  const root = await ensureProject(projectId);
-  return readFile(path.join(root, "web", "index.html"), "utf8");
+  await ensureProject(projectId);
+  return readFile(await safeProjectPath(projectId, "web", "index.html"), "utf8");
 }
 
 export async function writeLandingHtml(projectId: string, html: string) {
-  const root = await ensureProject(projectId);
-  await writeFile(path.join(root, "web", "index.html"), html, "utf8");
+  await ensureProject(projectId);
+  await writeFile(await safeProjectPath(projectId, "web", "index.html"), html, "utf8");
 }
 
 export async function saveProjectManifest(project: ProjectData, touch = true) {
-  const root = await ensureProject(project.id);
+  await ensureProject(project.id);
   if (touch) project.updatedAt = new Date().toISOString();
-  await writeJsonAtomic(path.join(root, "project.json"), project);
+  await writeJsonAtomic(await safeProjectPath(project.id, "project.json"), project);
   return project;
 }
 
@@ -71,34 +71,43 @@ interface SaveProjectOptions {
 
 export async function saveProject(project: ProjectData, options: SaveProjectOptions = {}): Promise<ProjectData> {
   const { touch = true, renderWeb = true, writeInitial = false } = options;
-  const root = projectRoot(project.id);
-  await Promise.all([
-    mkdir(path.join(root, "brand"), { recursive: true }),
-    mkdir(path.join(root, "design-system"), { recursive: true }),
-    mkdir(path.join(root, "web"), { recursive: true }),
-    mkdir(path.join(root, "slides"), { recursive: true }),
-    mkdir(path.join(root, "reviews"), { recursive: true }),
-    mkdir(path.join(root, "history"), { recursive: true })
+  const directories = await Promise.all([
+    safeProjectPath(project.id, "brand"),
+    safeProjectPath(project.id, "design-system"),
+    safeProjectPath(project.id, "web"),
+    safeProjectPath(project.id, "slides"),
+    safeProjectPath(project.id, "reviews"),
+    safeProjectPath(project.id, "history")
   ]);
+  await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })));
   if (touch) project.updatedAt = new Date().toISOString();
+  const [manifest, brand, tokensJson, tokensCss, deck, landing, initial] = await Promise.all([
+    safeProjectPath(project.id, "project.json"),
+    safeProjectPath(project.id, "brand", "brand.json"),
+    safeProjectPath(project.id, "design-system", "tokens.json"),
+    safeProjectPath(project.id, "design-system", "tokens.css"),
+    safeProjectPath(project.id, "slides", "deck.json"),
+    safeProjectPath(project.id, "web", "index.html"),
+    safeProjectPath(project.id, "history", "initial.json")
+  ]);
   const writes: Array<Promise<unknown>> = [
-    writeJsonAtomic(path.join(root, "project.json"), project),
-    writeJsonAtomic(path.join(root, "brand", "brand.json"), project.brand),
-    writeJsonAtomic(path.join(root, "design-system", "tokens.json"), project.tokens),
-    writeFile(path.join(root, "design-system", "tokens.css"), `${tokensToCss(project)}\n`, "utf8"),
-    writeJsonAtomic(path.join(root, "slides", "deck.json"), project.slides)
+    writeJsonAtomic(manifest, project),
+    writeJsonAtomic(brand, project.brand),
+    writeJsonAtomic(tokensJson, project.tokens),
+    writeFile(tokensCss, `${tokensToCss(project)}\n`, "utf8"),
+    writeJsonAtomic(deck, project.slides)
   ];
-  if (renderWeb) writes.push(writeFile(path.join(root, "web", "index.html"), renderLandingHtml(project), "utf8"));
-  if (writeInitial) writes.push(writeJsonAtomic(path.join(root, "history", "initial.json"), project));
+  if (renderWeb) writes.push(writeFile(landing, renderLandingHtml(project), "utf8"));
+  if (writeInitial) writes.push(writeJsonAtomic(initial, project));
   await Promise.all(writes);
   return project;
 }
 
 export async function resetProject(projectId = "demo") {
-  const root = await ensureProject(projectId);
+  await ensureProject(projectId);
   let reset: ProjectData;
   try {
-    reset = JSON.parse(await readFile(path.join(root, "history", "initial.json"), "utf8")) as ProjectData;
+    reset = JSON.parse(await readFile(await safeProjectPath(projectId, "history", "initial.json"), "utf8")) as ProjectData;
   } catch {
     reset = structuredClone(defaultProject);
     reset.id = projectId;
@@ -111,11 +120,12 @@ export async function resetProject(projectId = "demo") {
 }
 
 export async function listProjects(): Promise<ProjectSummary[]> {
-  await mkdir(projectsRoot, { recursive: true });
-  const entries = await readdir(projectsRoot, { withFileTypes: true });
+  const root = await safeProjectsRoot();
+  await mkdir(root, { recursive: true });
+  const entries = await readdir(root, { withFileTypes: true });
   const projects = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
     try {
-      const project = JSON.parse(await readFile(path.join(projectsRoot, entry.name, "project.json"), "utf8")) as ProjectData;
+      const project = JSON.parse(await readFile(await safeProjectPath(entry.name, "project.json"), "utf8")) as ProjectData;
       return { id: project.id, name: project.name, brandName: project.brand.name, industry: project.brand.industry, updatedAt: project.updatedAt, version: project.version } satisfies ProjectSummary;
     } catch { return null; }
   }));
@@ -123,10 +133,11 @@ export async function listProjects(): Promise<ProjectSummary[]> {
 }
 
 export async function createProject(input: { name?: string; brandName: string; industry: string; audience: string; promise: string }) {
+  await mkdir(await safeProjectsRoot(), { recursive: true });
   const base = input.brandName.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 36) || "project";
   let id = base;
   try {
-    await readFile(path.join(projectsRoot, id, "project.json"), "utf8");
+    await readFile(await safeProjectPath(id, "project.json"), "utf8");
     id = `${base}-${randomBytes(2).toString("hex")}`;
   } catch { /* The readable slug is available. */ }
   const now = new Date().toISOString();

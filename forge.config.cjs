@@ -12,7 +12,11 @@ module.exports = {
       return !(
         normalized === "/package.json" ||
         normalized === "/desktop" ||
-        normalized === "/desktop/main.cjs"
+        normalized === "/desktop/main.cjs" ||
+        normalized === "/desktop/preload.cjs" ||
+        normalized === "/desktop/preload-api.cjs" ||
+        normalized === "/desktop/workspace-ipc.cjs" ||
+        normalized === "/desktop/workspace-registry.cjs"
       );
     },
     extraResource: [

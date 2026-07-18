@@ -1,13 +1,14 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import type { VisualCheckReport } from "./codex-client";
-import { bundleRoot, projectRoot } from "./paths";
+import { bundleRoot, safeProjectPath, safeProjectRoot } from "./paths";
 
-export function runVisualCheck(projectId: string, phase: "before" | "after") {
-  const root = projectRoot(projectId);
+export async function runVisualCheck(projectId: string, phase: "before" | "after") {
+  const root = await safeProjectRoot(projectId);
   const script = path.join(bundleRoot, "skills", "web-art-director", "scripts", "visual-check.mjs");
+  const landing = await safeProjectPath(projectId, "web", "index.html");
   return new Promise<VisualCheckReport>((resolve, reject) => {
-    const child = spawn(process.execPath, [script, "--file", path.join(root, "web", "index.html"), "--phase", phase], { cwd: root, env: process.env });
+    const child = spawn(process.execPath, [script, "--file", landing, "--phase", phase], { cwd: root, env: process.env });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += String(chunk); });

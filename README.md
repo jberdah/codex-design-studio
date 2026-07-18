@@ -49,11 +49,14 @@ npm run desktop:make
 
 Outputs are written below `out/`. `desktop:package` creates the unpacked `.app`; `desktop:make` creates the configured ZIP and DMG. The development build is not code-signed or notarized.
 
-In the packaged application, projects live under the Electron user-data directory rather than inside the application bundle. On macOS the default workspace is:
+On first launch, the packaged application asks the user to choose or create a portable workspace folder. Project content lives in that folder rather than in the application bundle or Electron user-data directory:
 
 ```text
-~/Library/Application Support/Codex Design Studio/workspace/projects/
+<selected folder>/.codex-design-studio-workspace.json
+<selected folder>/projects/
 ```
+
+Electron `userData` contains only private recent-workspace metadata and operating-system grants. Moving a workspace preserves its ownership marker and allows it to be relinked through the native picker. See [the portable workspace contract](docs/portable-workspaces.md).
 
 ## Product flow
 
@@ -73,9 +76,10 @@ npm run typecheck
 npm test
 npm run build
 npm run test:e2e
+npm run test:electron
 ```
 
-`npm run test:e2e` uses an isolated `.e2e-workspace` on port 3100 and forces the deterministic path. `npm run test:agent` exercises the live structured App Server path and restores its test project afterward.
+`npm run test:e2e` uses an isolated `.e2e-workspace` on port 3100 and forces the deterministic path. `npm run test:electron` exercises the context-isolated bridge, relaunch persistence, and revocation; set `CODEX_STUDIO_PACKAGED_APP` to run it against a packaged executable. `npm run test:agent` exercises the live structured App Server path and restores its test project afterward.
 
 ## Project layout
 
