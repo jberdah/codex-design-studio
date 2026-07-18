@@ -3,7 +3,7 @@ export type SourceIntent = "extract" | "inspire" | "extract-and-inspire";
 export type SourceStatus = "queued" | "processing" | "ready" | "error" | "deleted";
 export type EvidenceKind = "color" | "font" | "tone" | "accessibility" | "rule" | "copy" | "visual" | "metadata";
 export type EvidenceDirective = "must-use" | "must-avoid" | "advisory";
-export type CandidateStatus = "proposed" | "accepted" | "rejected";
+export type CandidateStatus = "proposed" | "accepted" | "rejected" | "inspiration";
 export type ExtractionRunStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface SourceOrigin {

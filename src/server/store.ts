@@ -6,7 +6,7 @@ import { safeProjectPath, safeProjectRoot, safeProjectsRoot } from "./paths";
 import { renderLandingHtml, tokensToCss } from "./landing";
 
 async function writeJsonAtomic(filePath: string, value: unknown) {
-  const temp = `${filePath}.${process.pid}.tmp`;
+  const temp = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
   await rename(temp, filePath);
 }
