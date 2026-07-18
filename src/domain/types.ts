@@ -1,5 +1,10 @@
 export * from "./repository";
 export * from "./visual-assets";
+export * from "./integrations";
+export * from "./handoff";
+export * from "./background-jobs";
+export * from "./project-ecosystem";
+export * from "./collaboration";
 
 export type DeliverableType = "web" | "slides";
 
