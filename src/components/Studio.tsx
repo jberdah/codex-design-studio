@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectData, ProjectSummary, ReviewReport, SelectionContext } from "@/domain/types";
 import type { EvidenceDirective, EvidenceKind, ProvenanceGraph, SourceIntent, SourceKind } from "@/domain/sources";
+import type { ArtifactKind, BrandSystemRegistry, ReconciliationAction, ReconciliationReview } from "@/domain/brand-system";
 import { SlidePreview } from "./SlidePreview";
 
-type Surface = "sources" | "brand" | "system" | "web" | "slides";
+type Surface = "sources" | "reconcile" | "brand" | "system" | "web" | "slides";
 type ApiProject = { project: ProjectData; landingHtml: string };
 type AccountState = { account: null | { type: "apiKey" } | { type: "chatgpt"; email: string | null; planType: string }; requiresOpenaiAuth: boolean };
 
 const nav: Array<{ id: Surface; label: string; glyph: string }> = [
   { id: "sources", label: "Sources", glyph: "⊕" },
+  { id: "reconcile", label: "Reconcile", glyph: "≋" },
   { id: "brand", label: "Brand", glyph: "✦" },
   { id: "system", label: "Design system", glyph: "◫" },
   { id: "web", label: "Landing page", glyph: "⌁" },
@@ -37,6 +39,8 @@ export function Studio() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [agent, setAgent] = useState<{ available: boolean; model: string; cliVersion: string }>();
   const [provenance, setProvenance] = useState<ProvenanceGraph>();
+  const [reconciliation, setReconciliation] = useState<ReconciliationReview>();
+  const [systemRegistry, setSystemRegistry] = useState<BrandSystemRegistry>();
   const [sourceUrl, setSourceUrl] = useState("");
   const [sourceIntent, setSourceIntent] = useState<SourceIntent>("extract");
   const [rightsNotes, setRightsNotes] = useState("");
@@ -59,15 +63,23 @@ export function Studio() {
     setProvenance(result.graph);
   }, []);
 
+  const loadBrandSystems = useCallback(async (id: string) => {
+    const response = await fetch(`/api/brand-systems?project=${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load BrandSystem review state.");
+    const result = await response.json() as { registry: BrandSystemRegistry; reconciliation: ReconciliationReview };
+    setSystemRegistry(result.registry); setReconciliation(result.reconciliation);
+  }, []);
+
   useEffect(() => {
     const initialProject = new URL(window.location.href).searchParams.get("project") ?? "demo";
     setProjectId(initialProject);
     load(initialProject).catch((error) => setToast(error.message));
     loadSources(initialProject).catch((error) => setToast(error.message));
+    loadBrandSystems(initialProject).catch((error) => setToast(error.message));
     fetch("/api/projects", { cache: "no-store" }).then((response) => response.json()).then((result) => setProjects(result.projects ?? [])).catch(() => undefined);
     fetch("/api/account", { cache: "no-store" }).then((response) => response.json()).then(setAccount).catch(() => setAccount({ account: null, requiresOpenaiAuth: true }));
     fetch("/api/agent/status").then((response) => response.json()).then(setAgent).catch(() => undefined);
-  }, [load, loadSources]);
+  }, [load, loadSources, loadBrandSystems]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -90,10 +102,57 @@ export function Studio() {
     if (!project) return;
     setBusy("Saving brand system");
     try {
-      const response = await fetch(apiForProject("/api/project"), { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ brand: project.brand, tokens: project.tokens, landing: project.landing }) });
-      setData(await response.json() as ApiProject);
-      setToast(project.webCustomized ? "Brand system saved; custom Web composition preserved." : "Brand system saved and propagated to web + slides.");
+      const response = await fetch(apiForProject("/api/brand-systems"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "draft", brand: project.brand, tokens: project.tokens }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not create draft.");
+      setSystemRegistry(result.registry);
+      setToast(`Draft v${result.snapshot.number} saved. No artifact changed.`);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not create draft.");
     } finally { setBusy(undefined); }
+  }
+
+  async function publishDraft(versionId: string) {
+    setBusy("Publishing BrandSystem transaction");
+    try {
+      const response = await fetch(apiForProject("/api/brand-systems"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "publish", versionId }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Publication failed.");
+      setSystemRegistry(result.registry); setData((current) => current ? { ...current, project: result.project } : current);
+      setToast(`BrandSystem v${result.snapshot.number} published. Artifact bindings remain controlled.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Publication failed."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function decideReconciliation(groupId: string, action: ReconciliationAction, optionId?: string) {
+    const overrideValue = action === "override" ? window.prompt("Enter the authoritative replacement value") : undefined;
+    if (action === "override" && !overrideValue) return;
+    setBusy("Recording reconciliation decision");
+    try {
+      const response = await fetch(apiForProject("/api/reconciliation"), { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ groupId, action, optionId, overrideValue }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Decision failed.");
+      setReconciliation(result.reconciliation); setToast("Decision saved with its original evidence intact.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Decision failed."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function bindArtifact(artifactId: ArtifactKind, versionId: string, action: "upgrade" | "rollback") {
+    setBusy(`${action === "upgrade" ? "Upgrading" : "Rolling back"} ${artifactId}`);
+    try {
+      const response = await fetch(apiForProject(`/api/brand-systems/${encodeURIComponent(versionId)}`), { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ artifactId, action }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Binding change failed.");
+      setSystemRegistry(result.registry); setToast(result.artifactPreserved ? "Binding changed; independent Web composition was preserved." : "Artifact binding changed explicitly.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Binding change failed."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function previewBinding(artifactId: ArtifactKind, versionId: string) {
+    const response = await fetch(apiForProject(`/api/brand-systems/${encodeURIComponent(versionId)}`) + `&artifact=${artifactId}`, { cache: "no-store" });
+    const result = await response.json();
+    if (!response.ok) return setToast(result.error ?? "Preview failed.");
+    setToast(`Preview only · ${artifactId} would use v${result.targetVersion.number}; no files changed.`);
   }
 
   async function refine() {
@@ -140,7 +199,7 @@ export function Studio() {
     setProjectId(id);
     window.history.replaceState({}, "", `/?project=${encodeURIComponent(id)}`);
     setData(null); setSelection(undefined); setReview(undefined);
-    await Promise.all([load(id), loadSources(id)]);
+    await Promise.all([load(id), loadSources(id), loadBrandSystems(id)]);
   }
 
   async function addUrlSource() {
@@ -151,7 +210,7 @@ export function Studio() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Could not add source.");
       setSourceUrl("");
-      await loadSources(projectId);
+      await Promise.all([loadSources(projectId), loadBrandSystems(projectId)]);
       setToast(result.deduplicated ? "Duplicate source linked to the existing original." : "Source added and extraction queued.");
     } catch (error) { setToast(error instanceof Error ? error.message : "Could not add source."); }
     finally { setBusy(undefined); }
@@ -171,7 +230,7 @@ export function Studio() {
         if (!response.ok) throw new Error(result.error ?? `Could not add ${file.name}.`);
         if (result.deduplicated) duplicates += 1;
       }
-      await loadSources(projectId);
+      await Promise.all([loadSources(projectId), loadBrandSystems(projectId)]);
       setToast(duplicates ? `${files.length} sources processed · ${duplicates} duplicate${duplicates === 1 ? "" : "s"}.` : `${files.length} source${files.length === 1 ? "" : "s"} queued.`);
     } catch (error) { setToast(error instanceof Error ? error.message : "Could not add source files."); }
     finally { setBusy(undefined); }
@@ -183,7 +242,7 @@ export function Studio() {
       const response = await fetch(apiForProject(`/api/sources/${encodeURIComponent(sourceId)}`), action === "remove" ? { method: "DELETE" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Source action failed.");
-      await loadSources(projectId);
+      await Promise.all([loadSources(projectId), loadBrandSystems(projectId)]);
       setToast(action === "remove" ? "Source removed; its original remains recoverable." : "Extraction queued.");
     } catch (error) { setToast(error instanceof Error ? error.message : "Source action failed."); }
     finally { setBusy(undefined); }
@@ -204,7 +263,7 @@ export function Studio() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Could not add evidence.");
       setManualEvidence((current) => ({ ...current, value: "" }));
-      await loadSources(projectId); setToast("Manual evidence added with explicit provenance.");
+      await Promise.all([loadSources(projectId), loadBrandSystems(projectId)]); setToast("Manual evidence added with explicit provenance.");
     } catch (error) { setToast(error instanceof Error ? error.message : "Could not add evidence."); }
     finally { setBusy(undefined); }
   }
@@ -319,9 +378,22 @@ export function Studio() {
               {Boolean(provenance?.evidence.length) && <div className="evidence-strip">{provenance?.evidence.map((item) => <div key={item.id}><b>{item.directive}</b><strong>{item.kind}</strong><span>{typeof item.value === "string" ? item.value : JSON.stringify(item.value)}</span><small>{Math.round(item.confidence.score * 100)}% · {item.confidence.method}</small></div>)}</div>}
             </section>
           </div>}
+          {surface === "reconcile" && <div className="reconcile-page">
+            <div className="editor-heading"><div><small>EVIDENCE REVIEW</small><h1>Resolve without erasing.</h1><p>Compatible findings are merged. Every disagreement keeps its source, confidence, intent and human-authored priority.</p></div><span className={`conflict-count ${reconciliation?.unresolvedConflictCount ? "open" : "clear"}`}>{reconciliation?.unresolvedConflictCount ?? 0} unresolved</span></div>
+            <div className="reconcile-list">{reconciliation?.groups.length ? reconciliation.groups.map((group) => <article className={`reconcile-group ${group.conflict ? "conflict" : "compatible"}`} key={group.id}>
+              <header><div><small>{group.kind} · {group.label}</small><h2>{group.conflict ? "Sources disagree" : "Compatible evidence merged"}</h2>{group.conflictExplanation && <p>{group.conflictExplanation}</p>}</div>{group.decision && <span className="decision-badge">{group.decision.action}</span>}</header>
+              <div className="reconcile-options">{group.options.map((option) => <section className={group.decision?.optionId === option.id ? "selected" : ""} key={option.id}>
+                <div className="candidate-value">{typeof option.value === "string" ? option.value : JSON.stringify(option.value)}</div>
+                <div className="candidate-meta"><strong>{Math.round(option.confidence * 100)}% confidence</strong><span>priority {option.priority}</span><span>{option.sources.length} source{option.sources.length === 1 ? "" : "s"}</span></div>
+                <div className="source-previews">{option.sources.map((source) => <div key={source.id}><b>{source.userAuthored ? "✎" : "↗"}</b><span><strong>{source.sourceLabel}</strong><small>{source.sourceLocator} · {source.directive} · {Math.round(source.confidence * 100)}%</small></span></div>)}</div>
+                <div className="candidate-actions"><button onClick={() => decideReconciliation(group.id, "accept", option.id)}>Accept</button><button onClick={() => decideReconciliation(group.id, "inspiration", option.id)}>Inspiration</button></div>
+              </section>)}</div>
+              <footer><button onClick={() => decideReconciliation(group.id, "override")}>Override value</button><button className="danger" onClick={() => decideReconciliation(group.id, "reject")}>Reject group</button>{group.resolved && <span>✓ Resolved{group.resolvedValue !== undefined ? ` · ${typeof group.resolvedValue === "string" ? group.resolvedValue : "custom value"}` : ""}</span>}</footer>
+            </article>) : <div className="source-empty">No extracted candidates yet. Process sources or add manual evidence first.</div>}</div>
+          </div>}
           {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={data.landingHtml} sandbox="allow-scripts"/></div>}
           {surface === "slides" && <div className="slides-canvas"><div className="slides-stage"><SlidePreview slide={project.slides[activeSlide]} tokens={project.tokens} brandName={project.brand.name} index={activeSlide} active onClick={() => undefined}/></div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={activeSlide === index} onClick={() => setActiveSlide(index)}/></div>)}</div></div>}
-          {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Use everywhere.</h1><p>The profile guides every creative decision Codex makes.</p></div><button className="primary-button" onClick={saveSystem}>Save & propagate</button></div><div className="form-grid">
+          {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Review before release.</h1><p>The profile guides every creative decision and is published only through a versioned draft.</p></div><button className="primary-button" onClick={saveSystem}>Save draft</button></div><div className="form-grid">
             <label>Brand name<input value={project.brand.name} onChange={(e) => updateProject((p) => { p.brand.name = e.target.value; return p; })}/></label>
             <label>Industry<input value={project.brand.industry} onChange={(e) => updateProject((p) => { p.brand.industry = e.target.value; return p; })}/></label>
             <label className="span-two">Audience<input value={project.brand.audience} onChange={(e) => updateProject((p) => { p.brand.audience = e.target.value; return p; })}/></label>
@@ -329,7 +401,17 @@ export function Studio() {
             <label>Tone<input value={project.brand.tone} onChange={(e) => updateProject((p) => { p.brand.tone = e.target.value; return p; })}/></label>
             <label>Visual direction<input value={project.brand.visualDirection} onChange={(e) => updateProject((p) => { p.brand.visualDirection = e.target.value; return p; })}/></label>
           </div></div>}
-          {surface === "system" && <div className="token-page"><div className="editor-heading"><div><small>DESIGN SYSTEM · {project.tokens.version}</small><h1>Your brand, made executable.</h1><p>Every token below controls the landing page and presentation.</p></div><button className="primary-button" onClick={saveSystem}>Apply tokens</button></div><div className="token-layout"><section className="token-section"><h2>Colour foundations</h2><div className="swatch-grid">{Object.entries(project.tokens.colors).map(([name, value]) => <label key={name} className="swatch"><input type="color" value={value} onChange={(e) => updateProject((p) => { p.tokens.colors[name as keyof typeof p.tokens.colors] = e.target.value.toUpperCase(); return p; })}/><span style={{ background: value }}/><strong>{name}</strong><code>{value}</code></label>)}</div></section><section className="token-section type-preview"><h2>Typography</h2><div><small>DISPLAY · {project.tokens.typography.display}</small><strong style={{ fontFamily: project.tokens.typography.display }}>Clarity that compounds.</strong></div><div><small>BODY · {project.tokens.typography.body}</small><p style={{ fontFamily: project.tokens.typography.body }}>Precise, confident and human communication across every touchpoint.</p></div></section><section className="token-section json-panel"><h2>Structured source</h2><pre>{JSON.stringify(project.tokens, null, 2)}</pre></section></div></div>}
+          {surface === "system" && <div className="token-page system-kit"><div className="editor-heading"><div><small>DESIGN SYSTEM · REVIEW KIT</small><h1>Your brand, before it ships.</h1><p>Inspect foundations and representative components, then save a draft and publish it explicitly.</p></div><div className="system-actions"><button className="ghost-button" onClick={saveSystem}>Save new draft</button>{systemRegistry?.draftVersionId && <button className="primary-button" onClick={() => publishDraft(systemRegistry.draftVersionId!)} disabled={Boolean(reconciliation?.unresolvedConflictCount)}>Publish draft</button>}</div></div>
+            <div className="token-layout">
+              <section className="token-section"><h2>Palette</h2><div className="swatch-grid">{Object.entries(project.tokens.colors).map(([name, value]) => <label key={name} className="swatch"><input type="color" value={value} onChange={(e) => updateProject((p) => { p.tokens.colors[name as keyof typeof p.tokens.colors] = e.target.value.toUpperCase(); return p; })}/><span style={{ background: value }}/><strong>{name}</strong><code>{value}</code></label>)}</div></section>
+              <section className="token-section type-preview"><h2>Typography</h2><div><small>DISPLAY · {project.tokens.typography.display}</small><strong style={{ fontFamily: project.tokens.typography.display }}>Clarity that compounds.</strong></div><div><small>BODY · {project.tokens.typography.body}</small><p style={{ fontFamily: project.tokens.typography.body }}>Precise, confident and human communication across every touchpoint.</p></div></section>
+              <section className="token-section"><h2>Spacing scale</h2><div className="spacing-kit">{Object.entries(project.tokens.spacing).map(([name, value]) => <div key={name}><code>{name} · {value}px</code><span style={{ width: `${value * 2}px` }}/></div>)}</div></section>
+              <section className="token-section"><h2>Shape language</h2><div className="shape-kit">{Object.entries(project.tokens.shape).map(([name, value]) => <div key={name} style={{ borderRadius: value }}><span>{name}</span><code>{value}px</code></div>)}</div></section>
+              <section className="token-section component-kit"><h2>Navigation, buttons & cards</h2><nav><strong>{project.brand.name}</strong>{project.landing.navigation.items.map((item) => <span key={item.label}>{item.label}</span>)}<button>{project.landing.primaryCta}</button></nav><div className="button-kit"><button className="kit-primary">Primary action</button><button className="kit-secondary">Secondary action</button></div><div className="card-kit">{project.landing.benefits.slice(0, 3).map((benefit) => <article key={benefit.title}><small>0{project.landing.benefits.indexOf(benefit) + 1}</small><h3>{benefit.title}</h3><p>{benefit.body}</p></article>)}</div></section>
+              <section className="token-section representative-kit"><h2>Representative content</h2><small>{project.landing.eyebrow}</small><h3>{project.landing.headline}</h3><p>{project.landing.subhead}</p><button>{project.landing.primaryCta}</button></section>
+              <section className="token-section version-panel"><h2>Immutable versions</h2><div className="version-list">{systemRegistry?.versions.length ? [...systemRegistry.versions].reverse().map((version) => <div key={version.id}><span className={`status-badge ${version.status}`}>{version.status}</span><strong>v{version.number}</strong><code>{version.contentHash.slice(0, 10)}</code>{version.status === "draft" && <button onClick={() => publishDraft(version.id)} disabled={Boolean(reconciliation?.unresolvedConflictCount)}>Publish</button>}</div>) : <p>No version yet. Save a draft after reviewing the kit.</p>}</div><h2>Artifact bindings</h2>{systemRegistry?.bindings.map((binding) => <div className="binding-row" key={binding.artifactId}><div><strong>{binding.artifactId}</strong><small>{binding.independentlyComposed ? "Independent composition protected" : "Structured artifact"}</small></div><span>v{systemRegistry.versions.find((item) => item.id === binding.brandSystemVersionId)?.number}</span><div>{systemRegistry.versions.filter((item) => item.status !== "draft" && item.id !== binding.brandSystemVersionId).map((version) => <span key={version.id}><button onClick={() => previewBinding(binding.artifactId, version.id)}>Preview v{version.number}</button><button onClick={() => bindArtifact(binding.artifactId, version.id, version.number < (systemRegistry.versions.find((item) => item.id === binding.brandSystemVersionId)?.number ?? 0) ? "rollback" : "upgrade")}>{version.number < (systemRegistry.versions.find((item) => item.id === binding.brandSystemVersionId)?.number ?? 0) ? "Rollback" : "Upgrade"}</button></span>)}</div></div>)}</section>
+              <section className="token-section json-panel"><h2>Structured source</h2><pre>{JSON.stringify(project.tokens, null, 2)}</pre></section>
+            </div></div>}
         </div>
       </section>
       <aside className="chat-panel">
