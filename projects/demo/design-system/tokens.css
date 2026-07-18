@@ -1,0 +1,12 @@
+:root {
+  --brand-primary: #1C3D38;
+  --brand-secondary: #7B8F69;
+  --brand-accent: #D8FF72;
+  --brand-background: #F3F1E9;
+  --brand-surface: #FFFFFF;
+  --brand-text: #17201E;
+  --font-display: "Georgia", serif;
+  --font-body: "Arial", sans-serif;
+  --radius-card: 22px;
+  --radius-button: 999px;
+}

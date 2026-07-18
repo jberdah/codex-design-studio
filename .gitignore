@@ -5,8 +5,12 @@ test-results/
 coverage/
 .DS_Store
 *.log
+*.tsbuildinfo
+claude-desktop-asar.zip
+.brainclaw/
 projects/*/history/
 projects/*/exports/
+projects/*/reviews/latest.json
 !projects/demo/history/.gitkeep
 !projects/demo/exports/.gitkeep
 

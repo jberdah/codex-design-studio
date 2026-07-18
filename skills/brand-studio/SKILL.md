@@ -1,85 +1,35 @@
 ---
 name: brand-studio
-description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
+description: Create or refine a coherent brand profile, design-token system, landing page content, and three-slide launch deck from one shared project source. Use when a user asks to generate branded web or presentation deliverables, change a selected visual element, revise brand tone or palette, or propagate a creative direction consistently across formats.
 ---
 
 # Brand Studio
 
-## Overview
+Create deliberate, reusable brand decisions rather than isolated page styling. Treat the project JSON and design tokens as the source of truth for every deliverable.
 
-[TODO: 1-2 sentences explaining what this skill enables]
+## Workflow
 
-## Structuring This Skill
+1. Read the current brand profile, tokens, landing content, slide specification, and any selected-element context.
+2. Translate the instruction into the smallest semantic change that satisfies it. Prefer changing tokens or structured copy over format-specific markup.
+3. Preserve the brand promise, audience, voice constraints, and information hierarchy unless the user explicitly asks to replace them.
+4. Keep every color as a six-digit hexadecimal value and maintain readable text/background contrast.
+5. Propagate the direction to both web and slides. A palette, typography, voice, or visual-direction change is never local to only one renderer.
+6. Return a concise summary naming the edited area and the cross-format impact.
 
-[TODO: Choose the structure that best fits this skill's purpose. Common patterns:
+## Contextual Refinement
 
-**1. Workflow-Based** (best for sequential processes)
-- Works well when there are clear step-by-step procedures
-- Example: DOCX skill with "Workflow Decision Tree" -> "Reading" -> "Creating" -> "Editing"
-- Structure: ## Overview -> ## Workflow Decision Tree -> ## Step 1 -> ## Step 2...
+When selection context is present, use its `designId`, label, current text, DOM path, and viewport to infer scope. A request such as “shorten this” should change the selected copy, not an unrelated headline. Broaden the change only when the instruction describes a brand-level direction such as warmer, more premium, or more energetic.
 
-**2. Task-Based** (best for tool collections)
-- Works well when the skill offers different operations/capabilities
-- Example: PDF skill with "Quick Start" -> "Merge PDFs" -> "Split PDFs" -> "Extract Text"
-- Structure: ## Overview -> ## Quick Start -> ## Task Category 1 -> ## Task Category 2...
+## Output Contract
 
-**3. Reference/Guidelines** (best for standards or specifications)
-- Works well for brand guidelines, coding standards, or requirements
-- Example: Brand styling with "Brand Guidelines" -> "Colors" -> "Typography" -> "Features"
-- Structure: ## Overview -> ## Guidelines -> ## Specifications -> ## Usage...
+Return only the structured patch requested by the host. Leave unchanged fields null or absent. Do not write files, run commands, add commentary, or wrap JSON in Markdown. The host validates and applies the patch atomically.
 
-**4. Capabilities-Based** (best for integrated systems)
-- Works well when the skill provides multiple interrelated features
-- Example: Product Management with "Core Capabilities" -> numbered capability list
-- Structure: ## Overview -> ## Core Capabilities -> ### 1. Feature -> ### 2. Feature...
+Allowed semantic fields are landing headline, subhead, eyebrow, final headline, primary CTA, the six shared colors, visual direction, and summary. Do not invent arbitrary CSS, HTML, or slide coordinates.
 
-Patterns can be mixed and matched as needed. Most skills combine patterns (e.g., start with task-based, add workflow for complex operations).
+## Quality Bar
 
-Delete this entire "Structuring This Skill" section when done - it's just guidance.]
-
-## [TODO: Replace with the first main section based on chosen structure]
-
-[TODO: Add content here. See examples in existing skills:
-- Code samples for technical skills
-- Decision trees for complex workflows
-- Concrete examples with realistic user requests
-- References to scripts/templates/references as needed]
-
-## Resources (optional)
-
-Create only the resource directories this skill actually needs. Delete this section if no resources are required.
-
-### scripts/
-Executable code (Python/Bash/etc.) that can be run directly to perform specific operations.
-
-**Examples from other skills:**
-- PDF skill: `fill_fillable_fields.py`, `extract_form_field_info.py` - utilities for PDF manipulation
-- DOCX skill: `document.py`, `utilities.py` - Python modules for document processing
-
-**Appropriate for:** Python scripts, shell scripts, or any executable code that performs automation, data processing, or specific operations.
-
-**Note:** Scripts may be executed without loading into context, but can still be read by Codex for patching or environment adjustments.
-
-### references/
-Documentation and reference material intended to be loaded into context to inform Codex's process and thinking.
-
-**Examples from other skills:**
-- Product management: `communication.md`, `context_building.md` - detailed workflow guides
-- BigQuery: API reference documentation and query examples
-- Finance: Schema documentation, company policies
-
-**Appropriate for:** In-depth documentation, API references, database schemas, comprehensive guides, or any detailed information that Codex should reference while working.
-
-### assets/
-Files not intended to be loaded into context, but rather used within the output Codex produces.
-
-**Examples from other skills:**
-- Brand styling: PowerPoint template files (.pptx), logo files
-- Frontend builder: HTML/React boilerplate project directories
-- Typography: Font files (.ttf, .woff2)
-
-**Appropriate for:** Templates, boilerplate code, document templates, images, icons, fonts, or any files meant to be copied or used in the final output.
-
----
-
-**Not every skill requires all three types of resources.**
+- Use specific, audience-aware copy; avoid generic superlatives and the brand’s forbidden patterns.
+- Keep the hero headline compact enough for desktop and mobile layouts.
+- Use restrained palettes with clear functional roles for primary, secondary, accent, background, surface, and text.
+- Preserve the three-part deck narrative: proposition, value, evidence.
+- State that accepted changes propagate to web and slides.

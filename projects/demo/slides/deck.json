@@ -1,0 +1,40 @@
+[
+  {
+    "id": "slide-cover",
+    "type": "cover",
+    "eyebrow": "ASTERIA / 2026",
+    "title": "Climate intelligence for decisions that matter",
+    "body": "A launch narrative powered by one executable brand system."
+  },
+  {
+    "id": "slide-value",
+    "type": "value",
+    "eyebrow": "THE OPPORTUNITY",
+    "title": "Turn fragmented signals into coordinated action",
+    "bullets": [
+      "Unify operational and supplier data",
+      "Surface the highest-impact decisions",
+      "Keep teams aligned around measurable progress"
+    ]
+  },
+  {
+    "id": "slide-metrics",
+    "type": "metrics",
+    "eyebrow": "THE OUTCOME",
+    "title": "Clarity that compounds",
+    "metrics": [
+      {
+        "value": "42%",
+        "label": "faster reporting"
+      },
+      {
+        "value": "3.4×",
+        "label": "more actions completed"
+      },
+      {
+        "value": "1",
+        "label": "shared source of truth"
+      }
+    ]
+  }
+]
