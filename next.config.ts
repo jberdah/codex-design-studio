@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
       "./desktop/**/*",
       "./tests/**/*",
       "./docs/**/*",
-      "./claude-desktop-asar.zip"
+      "./.local-reference-assets/**/*"
     ]
   },
   // The local browser bridge exposes localhost through this loopback alias.
