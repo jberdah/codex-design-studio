@@ -73,7 +73,9 @@ export async function updateNamedDesignSystem(projectId: string, id: string, inp
   const timestamp = at(options.clock);
   return mutate(projectId, (registry) => {
     const designSystem = registry.designSystems.find((item) => item.id === id); if (!designSystem) throw new Error("Named design system not found.");
-    if (input.name && registry.designSystems.some((item) => item.id !== id && item.status === "active" && item.name.toLocaleLowerCase() === input.name!.trim().toLocaleLowerCase())) throw new Error("Active design-system names must be unique within a project.");
+    const nextName = input.name?.trim() ?? designSystem.name;
+    const nextStatus = input.status ?? designSystem.status;
+    if (nextStatus === "active" && registry.designSystems.some((item) => item.id !== id && item.status === "active" && item.name.toLocaleLowerCase() === nextName.toLocaleLowerCase())) throw new Error("Active design-system names must be unique within a project.");
     if (input.name) designSystem.name = input.name.trim(); if (input.brandSystemVersionId) designSystem.brandSystemVersionId = input.brandSystemVersionId;
     if (input.status) designSystem.status = input.status;
     if (input.makeDefault) { if (designSystem.status !== "active") throw new Error("An archived design system cannot be the project default."); registry.defaultDesignSystemId = id; }
@@ -132,4 +134,3 @@ export async function assertControlledTemplateAction(projectId: string, template
 export function assertProjectScope(scope: string): asserts scope is "project" {
   if (scope !== "project") throw new Error("Organization-wide governance is not part of the project-local ecosystem capability.");
 }
-

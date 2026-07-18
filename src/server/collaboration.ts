@@ -8,6 +8,8 @@ import { ensureProject } from "./store";
 const mutations = new Map<string, Promise<void>>();
 const capabilities: CollaborationCapability[] = ["encrypted-sync", "sharing", "roles", "audit-history", "conflict-resolution"];
 const roles: CollaborationRole[] = ["owner", "editor", "commenter", "viewer"];
+const MAX_SYNC_PLAINTEXT_BYTES = 100_000_000;
+const MAX_SYNC_SECRET_BYTES = 4_096;
 const dependencies: Partial<Record<CollaborationCapability, CollaborationCapability[]>> = {
   sharing: ["encrypted-sync"], roles: ["sharing"], "conflict-resolution": ["encrypted-sync"]
 };
@@ -19,7 +21,11 @@ function stable(value: unknown): unknown {
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, child]) => [key, stable(child)]));
   return value;
 }
-function serialize(value: unknown) { return JSON.stringify(stable(value)); }
+function serialize(value: unknown) {
+  const serialized = JSON.stringify(stable(value));
+  if (serialized === undefined) throw new Error("Encrypted sync payloads must be JSON values.");
+  return serialized;
+}
 
 function empty(projectId: string): CollaborationRegistry {
   return {
@@ -81,37 +87,73 @@ export async function enableCollaborationCapability(projectId: string, capabilit
 }
 
 export async function disableCollaborationCapability(projectId: string, capability: CollaborationCapability, input: { actor: string }, options: { clock?: () => Date } = {}) {
+  if (!capabilities.includes(capability)) throw new Error("Unknown collaboration capability.");
   const actor = text(input.actor, "Collaboration actor"); const timestamp = now(options.clock);
   return mutate(projectId, (registry) => {
+    const revokesMemberships = capability === "encrypted-sync" || capability === "sharing" || capability === "roles";
+    let revokedMembers = 0;
+    if (revokesMemberships) {
+      for (const member of registry.members) {
+        if (!member.revokedAt) { member.revokedAt = timestamp; revokedMembers += 1; }
+      }
+    }
+    if (capability === "audit-history") appendAudit(registry, actor, "capability.disabled", { capability, revokedMembers }, timestamp);
     registry.capabilities[capability] = false;
     if (capability === "encrypted-sync") {
       registry.mode = "local-only"; registry.capabilities.sharing = false; registry.capabilities.roles = false; registry.capabilities["conflict-resolution"] = false;
     }
     if (capability === "sharing") registry.capabilities.roles = false;
-    appendAudit(registry, actor, "capability.disabled", { capability }, timestamp); registry.updatedAt = timestamp; return structuredClone(registry);
+    if (capability !== "audit-history") appendAudit(registry, actor, "capability.disabled", { capability, revokedMembers }, timestamp);
+    registry.updatedAt = timestamp; return structuredClone(registry);
   });
 }
 
 function encryptionKey(secret: string | Uint8Array, salt: Uint8Array) {
   const bytes = typeof secret === "string" ? Buffer.from(secret, "utf8") : Buffer.from(secret);
   if (bytes.byteLength < 16) throw new Error("Encrypted sync keys must contain at least 16 bytes.");
+  if (bytes.byteLength > MAX_SYNC_SECRET_BYTES) throw new Error(`Encrypted sync keys cannot exceed ${MAX_SYNC_SECRET_BYTES} bytes.`);
   return scryptSync(bytes, salt, 32, { N: 16_384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 });
+}
+
+function decodeCanonicalBase64(value: unknown, label: string, maximumBytes: number, exactBytes?: number) {
+  if (typeof value !== "string" || !value.length) throw new Error(`Encrypted sync envelope ${label} is not canonical base64.`);
+  if (value.length > Math.ceil(maximumBytes / 3) * 4) throw new Error(`Encrypted sync envelope ${label} exceeds ${maximumBytes} bytes.`);
+  if (value.length % 4 !== 0 || !/^(?:[a-z0-9+/]{4})*(?:[a-z0-9+/]{2}==|[a-z0-9+/]{3}=)?$/i.test(value)) {
+    throw new Error(`Encrypted sync envelope ${label} is not canonical base64.`);
+  }
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
+  const decodedLength = value.length / 4 * 3 - padding;
+  if (decodedLength > maximumBytes) throw new Error(`Encrypted sync envelope ${label} exceeds ${maximumBytes} bytes.`);
+  if (exactBytes !== undefined && decodedLength !== exactBytes) throw new Error(`Encrypted sync envelope ${label} must contain exactly ${exactBytes} bytes.`);
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.toString("base64") !== value) throw new Error(`Encrypted sync envelope ${label} is not canonical base64.`);
+  return decoded;
+}
+
+export interface DecryptSyncOptions {
+  /** Constrained callers may lower, but never raise, the hard ciphertext limit. */
+  maxCiphertextBytes?: number;
 }
 
 /** Produces an opaque authenticated envelope; the caller owns transport and runtime key custody. */
 export async function encryptSyncPayload(projectId: string, payload: unknown, secret: string | Uint8Array, options: { clock?: () => Date } = {}): Promise<EncryptedSyncEnvelope> {
   const registry = await loadCollaborationRegistry(projectId); requireCapability(registry, "encrypted-sync");
-  const plaintext = Buffer.from(serialize(payload), "utf8"); if (plaintext.byteLength > 100_000_000) throw new Error("Encrypted sync payload exceeds 100 MB.");
+  const plaintext = Buffer.from(serialize(payload), "utf8"); if (plaintext.byteLength > MAX_SYNC_PLAINTEXT_BYTES) throw new Error("Encrypted sync payload exceeds 100 MB.");
   const salt = randomBytes(16); const iv = randomBytes(12); const key = encryptionKey(secret, salt); const cipher = createCipheriv("aes-256-gcm", key, iv);
   cipher.setAAD(Buffer.from(`codex-design-sync/v1:${projectId}`, "utf8")); const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
   return { schemaVersion: 1, projectId, cipher: "aes-256-gcm", kdf: "scrypt", salt: salt.toString("base64"), iv: iv.toString("base64"), authTag: cipher.getAuthTag().toString("base64"), ciphertext: ciphertext.toString("base64"), plaintextHash: digest(plaintext), createdAt: now(options.clock) };
 }
 
-export function decryptSyncPayload<T = unknown>(projectId: string, envelope: EncryptedSyncEnvelope, secret: string | Uint8Array): T {
+export function decryptSyncPayload<T = unknown>(projectId: string, envelope: EncryptedSyncEnvelope, secret: string | Uint8Array, options: DecryptSyncOptions = {}): T {
   if (envelope.schemaVersion !== 1 || envelope.projectId !== projectId || envelope.cipher !== "aes-256-gcm" || envelope.kdf !== "scrypt") throw new Error("Encrypted sync envelope does not belong to this project or schema.");
-  const salt = Buffer.from(envelope.salt, "base64"); const iv = Buffer.from(envelope.iv, "base64"); const ciphertext = Buffer.from(envelope.ciphertext, "base64");
-  if (salt.byteLength !== 16 || iv.byteLength !== 12) throw new Error("Encrypted sync envelope parameters are invalid.");
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(secret, salt), iv); decipher.setAAD(Buffer.from(`codex-design-sync/v1:${projectId}`, "utf8")); decipher.setAuthTag(Buffer.from(envelope.authTag, "base64"));
+  const maxCiphertextBytes = options.maxCiphertextBytes ?? MAX_SYNC_PLAINTEXT_BYTES;
+  if (!Number.isSafeInteger(maxCiphertextBytes) || maxCiphertextBytes < 1 || maxCiphertextBytes > MAX_SYNC_PLAINTEXT_BYTES) throw new Error(`Encrypted sync ciphertext limit must be between 1 and ${MAX_SYNC_PLAINTEXT_BYTES} bytes.`);
+  const salt = decodeCanonicalBase64(envelope.salt, "salt", 16, 16);
+  const iv = decodeCanonicalBase64(envelope.iv, "iv", 12, 12);
+  const authTag = decodeCanonicalBase64(envelope.authTag, "authentication tag", 16, 16);
+  if (typeof envelope.plaintextHash !== "string" || !/^[0-9a-f]{64}$/i.test(envelope.plaintextHash)) throw new Error("Encrypted sync envelope plaintext hash is invalid.");
+  const ciphertext = decodeCanonicalBase64(envelope.ciphertext, "ciphertext", maxCiphertextBytes);
+  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(secret, salt), iv); decipher.setAAD(Buffer.from(`codex-design-sync/v1:${projectId}`, "utf8")); decipher.setAuthTag(authTag);
   const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]); const expected = Buffer.from(envelope.plaintextHash, "hex"); const actual = Buffer.from(digest(plaintext), "hex");
   if (expected.byteLength !== actual.byteLength || !timingSafeEqual(expected, actual)) throw new Error("Encrypted sync payload hash does not match.");
   return JSON.parse(plaintext.toString("utf8")) as T;
@@ -165,4 +207,3 @@ export async function verifyCollaborationAudit(projectId: string) {
   }
   return true;
 }
-

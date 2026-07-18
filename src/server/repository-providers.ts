@@ -7,7 +7,7 @@ import type {
   RepositoryBrowseResult,
   RepositoryEntry,
   RepositoryProvider,
-  RepositoryPushRequest
+  RepositoryReferenceWriteRequest
 } from "@/domain/integrations";
 
 export type RepositoryProviderId = "github" | "gitlab" | "bitbucket";
@@ -38,28 +38,28 @@ export interface RepositoryProviderOptions {
 const declarations: Record<RepositoryProviderId, IntegrationDeclaration> = {
   github: {
     id: "github", displayName: "GitHub", version: "1.0.0", optional: true,
-    capabilities: ["repository.browse", "repository.push", "repository.change-request.create"],
+    capabilities: ["repository.browse", "repository.branch.create", "repository.ref.update", "repository.change-request.create"],
     permissions: [
       { id: "contents:read", access: "read", resource: "repository", reason: "Browse repository files and metadata.", required: true },
-      { id: "contents:write", access: "write", resource: "repository", reason: "Move an existing branch reference after an explicit push action.", required: true },
+      { id: "contents:write", access: "write", resource: "repository", reason: "Create or update a branch reference after an explicit action.", required: true },
       { id: "pull_requests:write", access: "write", resource: "change-request", reason: "Create a pull request when requested.", required: true }
     ]
   },
   gitlab: {
     id: "gitlab", displayName: "GitLab", version: "1.0.0", optional: true,
-    capabilities: ["repository.browse", "repository.push", "repository.change-request.create"],
+    capabilities: ["repository.browse", "repository.branch.create", "repository.change-request.create"],
     permissions: [
       { id: "read_repository", access: "read", resource: "repository", reason: "Browse repository files and metadata.", required: true },
-      { id: "write_repository", access: "write", resource: "repository", reason: "Move an existing branch reference after an explicit push action.", required: true },
+      { id: "write_repository", access: "write", resource: "repository", reason: "Create a branch at an existing revision.", required: true },
       { id: "api", access: "write", resource: "change-request", reason: "Create a merge request when requested.", required: true }
     ]
   },
   bitbucket: {
     id: "bitbucket", displayName: "Bitbucket", version: "1.0.0", optional: true,
-    capabilities: ["repository.browse", "repository.push", "repository.change-request.create"],
+    capabilities: ["repository.browse", "repository.branch.create", "repository.change-request.create"],
     permissions: [
-      { id: "repository:read", access: "read", resource: "repository", reason: "Browse repository files and metadata.", required: true },
-      { id: "repository:write", access: "write", resource: "repository", reason: "Move an existing branch reference after an explicit push action.", required: true },
+      { id: "repository", access: "read", resource: "repository", reason: "Browse repository files and metadata.", required: true },
+      { id: "repository:write", access: "write", resource: "repository", reason: "Create a branch at an existing revision.", required: true },
       { id: "pullrequest:write", access: "write", resource: "change-request", reason: "Create a pull request when requested.", required: true }
     ]
   }
@@ -109,7 +109,8 @@ abstract class HttpRepositoryProvider implements RepositoryProvider {
   protected abstract authorization(token: string): Record<string, string>;
   protected abstract browseRequest(request: RepositoryBrowseRequest): Omit<ProviderHttpRequest, "headers" | "signal">;
   protected abstract browseResponse(body: unknown, request: RepositoryBrowseRequest): RepositoryBrowseResult;
-  protected abstract pushRequest(request: RepositoryPushRequest): Omit<ProviderHttpRequest, "headers" | "signal">;
+  protected abstract createReferenceRequest(request: RepositoryReferenceWriteRequest): Omit<ProviderHttpRequest, "headers" | "signal">;
+  protected updateReferenceRequest(_request: RepositoryReferenceWriteRequest): Omit<ProviderHttpRequest, "headers" | "signal"> | undefined { return undefined; }
   protected abstract changeRequest(request: ChangeRequestCreateRequest): Omit<ProviderHttpRequest, "headers" | "signal">;
   protected abstract changeResponse(body: unknown): ChangeRequestResult;
 
@@ -126,10 +127,21 @@ abstract class HttpRepositoryProvider implements RepositoryProvider {
     return this.browseResponse(await this.call(this.browseRequest(request), context), request);
   }
 
-  async push(request: RepositoryPushRequest, context: AdapterContext) {
+  async writeReference(request: RepositoryReferenceWriteRequest, context: AdapterContext) {
     validateLocator(request); identifier(request.branch, "Branch"); identifier(request.revision, "Revision");
-    await this.call(this.pushRequest(request), context);
-    return { revision: request.revision };
+    if (request.operation === "create") {
+      if (request.force !== undefined) throw new Error("Force is only valid when updating a repository reference.");
+      if (!this.declaration.capabilities.includes("repository.branch.create")) throw new Error(`${this.declaration.displayName} does not support branch creation.`);
+      await this.call(this.createReferenceRequest(request), context);
+      return { revision: request.revision, operation: "created" as const };
+    }
+    if (request.operation !== "update") throw new Error("Repository reference operation is invalid.");
+    const updateRequest = this.updateReferenceRequest(request);
+    if (!this.declaration.capabilities.includes("repository.ref.update") || !updateRequest) {
+      throw new Error(`${this.declaration.displayName} does not support updating an existing branch reference through this adapter.`);
+    }
+    await this.call(updateRequest, context);
+    return { revision: request.revision, operation: "updated" as const };
   }
 
   async createChangeRequest(request: ChangeRequestCreateRequest, context: AdapterContext) {
@@ -162,7 +174,8 @@ export class GitHubRepositoryProvider extends HttpRepositoryProvider {
   protected authorization(token: string) { return { Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28" }; }
   protected browseRequest(r: RepositoryBrowseRequest) { return { method: "GET" as const, url: `${this.baseUrl}/repos/${r.owner}/${r.repository}/contents/${r.path ? encodeURIComponent(r.path).replaceAll("%2F", "/") : ""}?ref=${encodeURIComponent(r.ref ?? "HEAD")}` }; }
   protected browseResponse(body: unknown, r: RepositoryBrowseRequest) { return { ref: r.ref ?? "HEAD", entries: responseArray(body).map(entry) }; }
-  protected pushRequest(r: RepositoryPushRequest) { return { method: "PATCH" as const, url: `${this.baseUrl}/repos/${r.owner}/${r.repository}/git/refs/heads/${encodeURIComponent(r.branch)}`, body: JSON.stringify({ sha: r.revision, force: r.force ?? false }) }; }
+  protected createReferenceRequest(r: RepositoryReferenceWriteRequest) { return { method: "POST" as const, url: `${this.baseUrl}/repos/${r.owner}/${r.repository}/git/refs`, body: JSON.stringify({ ref: `refs/heads/${r.branch}`, sha: r.revision }) }; }
+  protected updateReferenceRequest(r: RepositoryReferenceWriteRequest) { return { method: "PATCH" as const, url: `${this.baseUrl}/repos/${r.owner}/${r.repository}/git/refs/heads/${encodeURIComponent(r.branch)}`, body: JSON.stringify({ sha: r.revision, force: r.force ?? false }) }; }
   protected changeRequest(r: ChangeRequestCreateRequest) { return { method: "POST" as const, url: `${this.baseUrl}/repos/${r.owner}/${r.repository}/pulls`, body: JSON.stringify({ title: r.title, body: r.description, head: r.sourceBranch, base: r.targetBranch, draft: r.draft ?? false }) }; }
   protected changeResponse(body: unknown) { const value = object(body); return { id: String(value.id), number: Number(value.number), webUrl: String(value.html_url), state: value.merged === true || typeof value.merged_at === "string" ? "merged" as const : String(value.state) === "closed" ? "closed" as const : "open" as const }; }
 }
@@ -173,7 +186,7 @@ export class GitLabRepositoryProvider extends HttpRepositoryProvider {
   private project(r: { owner: string; repository: string }) { return encodeURIComponent(`${r.owner}/${r.repository}`); }
   protected browseRequest(r: RepositoryBrowseRequest) { return { method: "GET" as const, url: `${this.baseUrl}/projects/${this.project(r)}/repository/tree?path=${encodeURIComponent(r.path ?? "")}&ref=${encodeURIComponent(r.ref ?? "HEAD")}&per_page=100` }; }
   protected browseResponse(body: unknown, r: RepositoryBrowseRequest) { return { ref: r.ref ?? "HEAD", entries: responseArray(body).map(entry) }; }
-  protected pushRequest(r: RepositoryPushRequest) { return { method: "POST" as const, url: `${this.baseUrl}/projects/${this.project(r)}/repository/branches`, body: JSON.stringify({ branch: r.branch, ref: r.revision }) }; }
+  protected createReferenceRequest(r: RepositoryReferenceWriteRequest) { return { method: "POST" as const, url: `${this.baseUrl}/projects/${this.project(r)}/repository/branches`, body: JSON.stringify({ branch: r.branch, ref: r.revision }) }; }
   protected changeRequest(r: ChangeRequestCreateRequest) { return { method: "POST" as const, url: `${this.baseUrl}/projects/${this.project(r)}/merge_requests`, body: JSON.stringify({ title: r.title, description: r.description, source_branch: r.sourceBranch, target_branch: r.targetBranch, draft: r.draft ?? false }) }; }
   protected changeResponse(body: unknown) { const value = object(body); return { id: String(value.id), number: Number(value.iid), webUrl: String(value.web_url), state: String(value.state) === "merged" ? "merged" as const : String(value.state) === "closed" ? "closed" as const : "open" as const }; }
 }
@@ -183,7 +196,7 @@ export class BitbucketRepositoryProvider extends HttpRepositoryProvider {
   protected authorization(token: string) { return { Authorization: `Bearer ${token}` }; }
   protected browseRequest(r: RepositoryBrowseRequest) { return { method: "GET" as const, url: `${this.baseUrl}/repositories/${r.owner}/${r.repository}/src/${encodeURIComponent(r.ref ?? "HEAD")}/${r.path ? encodeURIComponent(r.path).replaceAll("%2F", "/") : ""}` }; }
   protected browseResponse(body: unknown, r: RepositoryBrowseRequest) { const value = object(body); return { ref: r.ref ?? "HEAD", entries: responseArray(value.values ?? body).map(entry) }; }
-  protected pushRequest(r: RepositoryPushRequest) { return { method: "POST" as const, url: `${this.baseUrl}/repositories/${r.owner}/${r.repository}/refs/branches`, body: JSON.stringify({ name: r.branch, target: { hash: r.revision }, force: r.force ?? false }) }; }
+  protected createReferenceRequest(r: RepositoryReferenceWriteRequest) { return { method: "POST" as const, url: `${this.baseUrl}/repositories/${r.owner}/${r.repository}/refs/branches`, body: JSON.stringify({ name: r.branch, target: { hash: r.revision } }) }; }
   protected changeRequest(r: ChangeRequestCreateRequest) { return { method: "POST" as const, url: `${this.baseUrl}/repositories/${r.owner}/${r.repository}/pullrequests`, body: JSON.stringify({ title: r.title, description: r.description, source: { branch: { name: r.sourceBranch } }, destination: { branch: { name: r.targetBranch } }, draft: r.draft ?? false }) }; }
   protected changeResponse(body: unknown) { const value = object(body); const links = object(value.links); const html = object(links.html); return { id: String(value.id), number: Number(value.id), webUrl: String(html.href), state: String(value.state).toUpperCase() === "MERGED" ? "merged" as const : String(value.state).toUpperCase() === "DECLINED" ? "closed" as const : "open" as const }; }
 }

@@ -21,6 +21,8 @@ export interface BackgroundJob<TPayload = unknown, TResult = unknown> {
   projectId: string;
   kind: BackgroundJobKind;
   label: string;
+  /** Stable across retries and crash recovery so handlers can deduplicate external side effects. */
+  idempotencyKey: string;
   status: BackgroundJobStatus;
   payload: TPayload;
   result?: TResult;
@@ -49,6 +51,8 @@ export interface EnqueueBackgroundJob<TPayload = unknown> {
   kind: BackgroundJobKind;
   label: string;
   payload: TPayload;
+  /** Optional caller key. Reusing it with different work is rejected. */
+  idempotencyKey?: string;
   priority?: number;
   maxAttempts?: number;
 }
@@ -56,6 +60,7 @@ export interface EnqueueBackgroundJob<TPayload = unknown> {
 export interface JobExecutionContext {
   projectId: string;
   jobId: string;
+  idempotencyKey: string;
   attempt: number;
   signal: AbortSignal;
   report(progress: number, phase: string): Promise<void>;
@@ -76,4 +81,3 @@ export interface DesktopJobNotification {
 export interface DesktopNotificationSink {
   notify(notification: DesktopJobNotification): Promise<void> | void;
 }
-

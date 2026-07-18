@@ -3,7 +3,8 @@ export type IntegrationCapability =
   | "source.read"
   | "export.write"
   | "repository.browse"
-  | "repository.push"
+  | "repository.branch.create"
+  | "repository.ref.update"
   | "repository.change-request.create";
 
 export type IntegrationPermissionAccess = "read" | "write";
@@ -89,10 +90,12 @@ export interface RepositoryBrowseResult {
   entries: RepositoryEntry[];
 }
 
-export interface RepositoryPushRequest extends RepositoryLocator {
+export interface RepositoryReferenceWriteRequest extends RepositoryLocator {
+  operation: "create" | "update";
   branch: string;
-  /** Provider-visible commit or changeset already uploaded by a trusted Git transport. */
+  /** Provider-visible commit already uploaded by a trusted Git transport. */
   revision: string;
+  /** Only valid for an update operation on providers declaring repository.ref.update. */
   force?: boolean;
 }
 
@@ -114,7 +117,7 @@ export interface ChangeRequestResult {
 export interface RepositoryProvider {
   readonly declaration: IntegrationDeclaration;
   browse(request: RepositoryBrowseRequest, context: AdapterContext): Promise<RepositoryBrowseResult>;
-  push(request: RepositoryPushRequest, context: AdapterContext): Promise<{ revision: string }>;
+  writeReference(request: RepositoryReferenceWriteRequest, context: AdapterContext): Promise<{ revision: string; operation: "created" | "updated" }>;
   createChangeRequest(request: ChangeRequestCreateRequest, context: AdapterContext): Promise<ChangeRequestResult>;
 }
 
@@ -128,4 +131,3 @@ export function permissionsFor(
   if (!permissions.length) throw new Error(`${declaration.id} must declare a required ${access} permission for ${capability}.`);
   return permissions.map((permission) => ({ ...permission }));
 }
-

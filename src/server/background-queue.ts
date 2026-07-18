@@ -17,6 +17,7 @@ import { ensureProject } from "./store";
 
 const mutations = new Map<string, Promise<void>>();
 const MAX_PAYLOAD_BYTES = 1_000_000;
+const IDEMPOTENCY_KEY = /^[a-z0-9][a-z0-9._:/-]{0,199}$/i;
 
 export interface BackgroundQueueOptions {
   clock?: () => Date;
@@ -43,7 +44,12 @@ async function storage(projectId: string) {
 }
 
 async function load(projectId: string): Promise<BackgroundQueueState> {
-  try { return JSON.parse(await readFile(await storage(projectId), "utf8")) as BackgroundQueueState; }
+  try {
+    const state = JSON.parse(await readFile(await storage(projectId), "utf8")) as BackgroundQueueState;
+    if (state.schemaVersion !== 1 || state.projectId !== projectId || !Array.isArray(state.jobs)) throw new Error("Invalid background queue state.");
+    for (const job of state.jobs) job.idempotencyKey ||= job.id;
+    return state;
+  }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     return empty(projectId);
@@ -72,12 +78,37 @@ async function mutate<T>(projectId: string, operation: (state: BackgroundQueueSt
   }
 }
 
-function validatePortablePayload(payload: unknown) {
-  let serialized: string;
-  try { serialized = JSON.stringify(payload); } catch { throw new Error("Background job payloads must be portable JSON values."); }
-  if (serialized === undefined) throw new Error("Background job payloads must be portable JSON values.");
-  if (Buffer.byteLength(serialized, "utf8") > MAX_PAYLOAD_BYTES) throw new Error("Background job payload exceeds 1 MB.");
+function canonicalPortableJson(value: unknown, label: "payload" | "result") {
+  const seen = new WeakSet<object>();
+  const visit = (current: unknown, location: string): unknown => {
+    if (current === null || typeof current === "string" || typeof current === "boolean") return current;
+    if (typeof current === "number") {
+      if (!Number.isFinite(current)) throw new Error(`Background job ${label}s must contain finite numbers at ${location}.`);
+      return current;
+    }
+    if (typeof current !== "object") throw new Error(`Background job ${label}s must be strict portable JSON values; ${location} is not JSON.`);
+    if (seen.has(current)) throw new Error(`Background job ${label}s cannot contain cycles.`);
+    seen.add(current);
+    try {
+      if (Array.isArray(current)) {
+        return current.map((child, index) => {
+          if (!Object.hasOwn(current, index)) throw new Error(`Background job ${label}s cannot contain sparse arrays at ${location}.`);
+          return visit(child, `${location}[${index}]`);
+        });
+      }
+      const prototype = Object.getPrototypeOf(current);
+      if (prototype !== Object.prototype && prototype !== null) throw new Error(`Background job ${label}s only support plain objects at ${location}.`);
+      if (Object.getOwnPropertySymbols(current).length) throw new Error(`Background job ${label}s cannot contain symbol keys at ${location}.`);
+      const normalized: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+      for (const key of Object.keys(current as Record<string, unknown>).sort()) normalized[key] = visit((current as Record<string, unknown>)[key], `${location}.${key}`);
+      return normalized;
+    } finally { seen.delete(current); }
+  };
+  const normalized = visit(value, "$root");
+  const serialized = JSON.stringify(normalized);
+  if (Buffer.byteLength(serialized, "utf8") > MAX_PAYLOAD_BYTES) throw new Error(`Background job ${label} exceeds 1 MB.`);
   if (/(access[_-]?token|authorization|api[_-]?key|password)\s*[":=]/i.test(serialized)) throw new Error("Credentials must be resolved at execution time, not stored in job payloads.");
+  return { value: JSON.parse(serialized) as unknown, serialized };
 }
 
 function errorFrom(value: unknown): BackgroundJobError {
@@ -118,36 +149,63 @@ export class BackgroundQueue {
   }
 
   async enqueue<TPayload>(input: EnqueueBackgroundJob<TPayload>): Promise<BackgroundJob<TPayload>> {
-    validatePortablePayload(input.payload);
+    const payload = canonicalPortableJson(input.payload, "payload");
     if (!input.label.trim() || input.label.length > 300) throw new Error("Background job labels must be between 1 and 300 characters.");
     const maxAttempts = input.maxAttempts ?? 3;
     if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) throw new Error("Background jobs support between 1 and 10 attempts.");
     const priority = input.priority ?? 0;
     if (!Number.isInteger(priority) || priority < -100 || priority > 100) throw new Error("Background job priority must be an integer from -100 to 100.");
     const at = timestamp(this.clock);
+    const id = `job_${randomUUID()}`;
+    const idempotencyKey = input.idempotencyKey ?? id;
+    if (!IDEMPOTENCY_KEY.test(idempotencyKey)) throw new Error("Background job idempotency keys must be stable identifiers of at most 200 characters.");
     const job: BackgroundJob<TPayload> = {
-      schemaVersion: 1, id: `job_${randomUUID()}`, projectId: this.projectId, kind: input.kind,
-      label: input.label.trim(), status: "queued", payload: structuredClone(input.payload), progress: 0, phase: "queued",
+      schemaVersion: 1, id, projectId: this.projectId, kind: input.kind,
+      label: input.label.trim(), idempotencyKey, status: "queued", payload: payload.value as TPayload, progress: 0, phase: "queued",
       priority, maxAttempts, attempts: [], createdAt: at, updatedAt: at, availableAt: at
     };
-    return mutate(this.projectId, (state) => { state.jobs.push(job as BackgroundJob); state.updatedAt = at; return structuredClone(job); });
+    return mutate(this.projectId, (state) => {
+      const existing = state.jobs.find((candidate) => candidate.idempotencyKey === idempotencyKey);
+      if (existing) {
+        if (existing.kind !== input.kind || canonicalPortableJson(existing.payload, "payload").serialized !== payload.serialized) throw new Error("A background job idempotency key cannot be reused for different work.");
+        return structuredClone(existing) as BackgroundJob<TPayload>;
+      }
+      state.jobs.push(job as BackgroundJob); state.updatedAt = at; return structuredClone(job);
+    });
   }
 
   async recoverInterrupted(): Promise<number> {
     const at = timestamp(this.clock);
-    return mutate(this.projectId, (state) => {
+    const recovered = await mutate(this.projectId, (state) => {
       let count = 0;
+      const terminal: BackgroundJob[] = [];
       for (const job of state.jobs.filter((candidate) => candidate.status === "running")) {
         const attempt = job.attempts.at(-1);
         if (attempt?.status === "running") {
-          attempt.status = "failed"; attempt.finishedAt = at;
-          attempt.error = { code: "worker_interrupted", message: "The prior worker stopped before this attempt completed.", retryable: true };
+          attempt.finishedAt = at;
         }
-        job.status = "queued"; job.phase = "recovered after worker interruption"; job.availableAt = at; job.updatedAt = at; job.startedAt = undefined; count += 1;
+        if (job.cancellationRequestedAt) {
+          if (attempt) { attempt.status = "cancelled"; attempt.error = { code: "cancelled", message: "Cancellation was preserved across worker recovery.", retryable: false }; }
+          job.status = "cancelled"; job.phase = "cancelled"; job.finishedAt = at;
+        } else {
+          const failure = { code: "worker_interrupted", message: "The prior worker stopped before this attempt completed. Retry uses the same idempotency key.", retryable: job.attempts.length < job.maxAttempts };
+          if (attempt) { attempt.status = "failed"; attempt.error = failure; }
+          job.error = failure;
+          if (job.attempts.length >= job.maxAttempts) {
+            job.status = "failed"; job.phase = "failed after worker interruption"; job.finishedAt = at;
+          } else {
+            job.status = "queued"; job.phase = "recovered after worker interruption"; job.availableAt = at; job.startedAt = undefined; job.finishedAt = undefined;
+          }
+        }
+        job.updatedAt = at;
+        if (job.status === "failed" || job.status === "cancelled") terminal.push(structuredClone(job));
+        count += 1;
       }
       if (count) state.updatedAt = at;
-      return count;
+      return { count, terminal };
     });
+    for (const job of recovered.terminal) await this.notify(job);
+    return recovered.count;
   }
 
   async cancel(jobId: string) {
@@ -211,10 +269,10 @@ export class BackgroundQueue {
     if (!claimed) return undefined;
     const handler = this.handlers.get(claimed.kind)!;
     const controller = new AbortController(); this.controllers.set(claimed.id, controller);
-    const context: JobExecutionContext = { projectId: this.projectId, jobId: claimed.id, attempt: claimed.attempts.length, signal: controller.signal, report: (progress, phase) => this.report(claimed.id, progress, phase) };
+    const context: JobExecutionContext = { projectId: this.projectId, jobId: claimed.id, idempotencyKey: claimed.idempotencyKey, attempt: claimed.attempts.length, signal: controller.signal, report: (progress, phase) => this.report(claimed.id, progress, phase) };
     try {
       const result = await handler(structuredClone(claimed.payload), context);
-      validatePortablePayload(result);
+      const portableResult = canonicalPortableJson(result, "result");
       const at = timestamp(this.clock);
       const completed = await mutate(this.projectId, (state) => {
         const job = state.jobs.find((candidate) => candidate.id === claimed.id)!;
@@ -222,7 +280,7 @@ export class BackgroundQueue {
         if (job.cancellationRequestedAt || controller.signal.aborted) {
           attempt.status = "cancelled"; job.status = "cancelled"; job.phase = "cancelled";
         } else {
-          attempt.status = "succeeded"; job.status = "succeeded"; job.result = result; job.progress = 100; job.phase = "completed";
+          attempt.status = "succeeded"; job.status = "succeeded"; job.result = portableResult.value; job.progress = 100; job.phase = "completed";
         }
         job.finishedAt = at; job.updatedAt = at; state.updatedAt = at; return structuredClone(job);
       });
@@ -279,4 +337,3 @@ export class BackgroundQueue {
     try { await this.notificationSink.notify(notification); } catch { /* Notifications never affect durable work state. */ }
   }
 }
-
