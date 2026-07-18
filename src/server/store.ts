@@ -35,7 +35,7 @@ export async function loadProject(projectId = "demo"): Promise<ProjectData> {
   return JSON.parse(await readFile(path.join(root, "project.json"), "utf8")) as ProjectData;
 }
 
-export async function saveProject(project: ProjectData): Promise<ProjectData> {
+export async function saveProject(project: ProjectData, touch = true): Promise<ProjectData> {
   const root = projectRoot(project.id);
   await Promise.all([
     mkdir(path.join(root, "brand"), { recursive: true }),
@@ -44,7 +44,7 @@ export async function saveProject(project: ProjectData): Promise<ProjectData> {
     mkdir(path.join(root, "slides"), { recursive: true }),
     mkdir(path.join(root, "reviews"), { recursive: true })
   ]);
-  project.updatedAt = new Date().toISOString();
+  if (touch) project.updatedAt = new Date().toISOString();
   await Promise.all([
     writeJsonAtomic(path.join(root, "project.json"), project),
     writeJsonAtomic(path.join(root, "brand", "brand.json"), project.brand),
@@ -59,7 +59,6 @@ export async function saveProject(project: ProjectData): Promise<ProjectData> {
 export async function resetProject(projectId = "demo") {
   const reset = structuredClone(defaultProject);
   reset.id = projectId;
-  reset.createdAt = new Date().toISOString();
   reset.version = 1;
-  return saveProject(reset);
+  return saveProject(reset, false);
 }
