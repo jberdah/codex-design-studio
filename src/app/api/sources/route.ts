@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { SourceIntent, SourceKind } from "@/domain/sources";
 import { activeProjectId } from "@/server/paths";
 import { addSource, loadProvenanceGraph } from "@/server/source-store";
+import { assertSafeWebUrl } from "@/server/network-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,10 +57,7 @@ export async function POST(request: Request) {
     if (typeof body.url !== "string") return NextResponse.json({ error: "A URL is required." }, { status: 400 });
     if (body.url.length > 8_192) return NextResponse.json({ error: "The source URL is too long." }, { status: 400 });
     let url: URL;
-    try { url = new URL(body.url); } catch { return NextResponse.json({ error: "Enter a valid URL." }, { status: 400 }); }
-    if (!["http:", "https:"].includes(url.protocol)) return NextResponse.json({ error: "Only HTTP and HTTPS URLs are supported." }, { status: 400 });
-    if (url.username || url.password) return NextResponse.json({ error: "Source URLs must not contain embedded credentials." }, { status: 400 });
-    url.hash = "";
+    try { url = (await assertSafeWebUrl(body.url)).url; } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Enter a safe URL." }, { status: 400 }); }
     const canonical = url.toString();
     const intent = intents.has(body.intent as SourceIntent) ? body.intent as SourceIntent : "extract";
     const result = await addSource(projectId, {
