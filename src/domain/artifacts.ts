@@ -186,7 +186,7 @@ export interface SlideTextNode extends SlideNodeBase {
   type: "text";
   text: string;
   editable: true;
-  style?: { fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; align?: "left" | "center" | "right" };
+  style?: { fontFamily?: string; fontSize?: number; fontWeight?: number; color?: string; align?: "left" | "center" | "right"; lineHeight?: number; letterSpacing?: number };
 }
 
 export interface SlideMediaNode extends SlideNodeBase {

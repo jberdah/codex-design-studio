@@ -1,4 +1,6 @@
 import PptxGenJS from "pptxgenjs";
+import { createSlideDocument, type SlideDocument, type SlideMediaNode, type SlideNode, type SlideShapeNode, type SlideTextNode } from "@/domain/artifacts";
+import { orderedSlideNodes } from "@/domain/slide-rendering";
 import type { ProjectData, SlideSpec } from "@/domain/types";
 
 const hex = (value: string) => value.replace("#", "").toUpperCase();
@@ -52,13 +54,123 @@ function addMetrics(slide: PptxGenJS.Slide, project: ProjectData, spec: SlideSpe
   slide.addText("The same source of truth powers every output.", { x: 0.72, y: 6.55, w: 6.5, h: 0.3, fontFace: typography.body, fontSize: 11, color: hex(colors.secondary), charSpacing: 0.6 });
 }
 
+function clampedOpacity(value?: number) {
+  return Math.max(0, Math.min(1, value ?? 1));
+}
+
+function transparency(node: SlideNode) {
+  return Math.round((1 - clampedOpacity(node.opacity)) * 100);
+}
+
+function color(value: string | undefined, fallback: string) {
+  const normalized = (value ?? fallback).trim();
+  const short = normalized.match(/^#?([a-f\d])([a-f\d])([a-f\d])$/i);
+  if (short) return `${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`.toUpperCase();
+  const full = normalized.match(/^#?([a-f\d]{6})$/i);
+  return (full?.[1] ?? fallback.replace("#", "")).toUpperCase();
+}
+
+function sceneFrame(node: SlideNode) {
+  return {
+    x: node.frame.x / 72,
+    y: node.frame.y / 72,
+    w: node.frame.width / 72,
+    h: node.frame.height / 72,
+    rotate: node.rotation,
+    objectName: node.name ?? node.id
+  };
+}
+
+function addSceneText(slide: PptxGenJS.Slide, project: ProjectData, node: SlideTextNode) {
+  const style = node.style ?? {};
+  slide.addText(node.text, {
+    ...sceneFrame(node),
+    fontFace: style.fontFamily ?? project.tokens.typography.body,
+    fontSize: style.fontSize ?? 18,
+    bold: style.fontWeight !== undefined ? style.fontWeight >= 600 : false,
+    color: color(style.color, project.tokens.colors.text),
+    align: style.align ?? "left",
+    lineSpacingMultiple: style.lineHeight,
+    charSpacing: style.letterSpacing,
+    transparency: transparency(node),
+    margin: 0,
+    valign: "top",
+    fit: "shrink"
+  });
+}
+
+function addSceneShape(slide: PptxGenJS.Slide, project: ProjectData, node: SlideShapeNode) {
+  const alpha = transparency(node);
+  const shape = node.shape === "ellipse" ? "ellipse" : node.shape === "line" ? "line" : "rect";
+  const fill = node.shape === "line" || !node.fill ? { transparency: 100 } : { color: color(node.fill, project.tokens.colors.background), transparency: alpha };
+  const line = node.stroke ? { color: color(node.stroke, project.tokens.colors.text), transparency: alpha, width: 1 } : { transparency: 100 };
+  // PptxGenJS cannot round-trip arbitrary SVG path data. Path nodes therefore
+  // remain editable frame-preserving rectangles until a native freeform mapper
+  // is available; all supported geometry is emitted directly.
+  slide.addShape(shape, { ...sceneFrame(node), fill, line });
+}
+
+function embeddedImage(uri: string) {
+  const match = uri.match(/^data:(image\/(?:png|jpeg|webp));base64,([a-z\d+/=]+)$/i);
+  return match && uri.length <= 8_000_000 ? `${match[1]};base64,${match[2]}` : undefined;
+}
+
+function addSceneMedia(slide: PptxGenJS.Slide, project: ProjectData, node: SlideMediaNode) {
+  const frame = sceneFrame(node);
+  const data = node.mediaType === "image" ? embeddedImage(node.source.uri) : undefined;
+  if (data) {
+    slide.addImage({ ...frame, data, altText: node.altText, transparency: transparency(node) });
+    return;
+  }
+  // Portable project:// and asset:// references require a project asset
+  // resolver. Until one is supplied, keep their frame and description as
+  // editable PowerPoint elements instead of dereferencing untrusted URIs.
+  slide.addShape("rect", {
+    ...frame,
+    fill: { color: color(project.tokens.colors.background, "FFFFFF"), transparency: Math.min(85, transparency(node) + 55) },
+    line: { color: color(project.tokens.colors.secondary, "777777"), transparency: transparency(node), width: 1 }
+  });
+  slide.addText(node.altText || node.mediaType, {
+    ...frame,
+    objectName: `${node.name ?? node.id} description`,
+    fontFace: project.tokens.typography.body,
+    fontSize: 10,
+    color: color(project.tokens.colors.text, "17161B"),
+    transparency: transparency(node),
+    align: "center",
+    valign: "middle",
+    margin: 4,
+    fit: "shrink"
+  });
+}
+
+function addSceneGraphSlides(pptx: PptxGenJS, project: ProjectData, document: SlideDocument) {
+  for (const page of document.slides) {
+    const slide = pptx.addSlide();
+    for (const node of orderedSlideNodes(page)) {
+      if (node.type === "text") addSceneText(slide, project, node);
+      else if (node.type === "shape") addSceneShape(slide, project, node);
+      else addSceneMedia(slide, project, node);
+    }
+    slide.addNotes(page.notes ?? `Generated from the editable scene graph and design-system/tokens.json version ${project.tokens.version}.`);
+  }
+}
+
 export async function generatePptx(project: ProjectData): Promise<Buffer> {
   const pptx = new PptxGenJS();
-  pptx.layout = "LAYOUT_WIDE";
   pptx.author = "Codex Design Studio";
   pptx.subject = `Brand launch deck for ${project.brand.name}`;
   pptx.title = `${project.brand.name} launch narrative`;
   pptx.company = project.brand.name;
+  if (project.slideDocument) {
+    const document = createSlideDocument(project.slideDocument);
+    pptx.defineLayout({ name: "SCENE_GRAPH", width: document.dimensions.width / 72, height: document.dimensions.height / 72 });
+    pptx.layout = "SCENE_GRAPH";
+    addSceneGraphSlides(pptx, project, document);
+    const output = await pptx.write({ outputType: "nodebuffer", compression: true });
+    return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer);
+  }
+  pptx.layout = "LAYOUT_WIDE";
   pptx.defineSlideMaster({ title: "BASE", background: { color: hex(project.tokens.colors.background) }, objects: [] });
   project.slides.forEach((spec, index) => {
     const slide = pptx.addSlide("BASE");

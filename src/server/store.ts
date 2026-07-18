@@ -5,6 +5,19 @@ import type { ProjectData, ProjectSummary } from "@/domain/types";
 import { safeProjectPath, safeProjectRoot, safeProjectsRoot } from "./paths";
 import { renderLandingHtml, tokensToCss } from "./landing";
 
+const projectMutationQueues = new Map<string, Promise<void>>();
+
+async function serializeProject<T>(projectId: string, operation: () => Promise<T>) {
+  const previous = projectMutationQueues.get(projectId) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const queued = previous.then(() => gate);
+  projectMutationQueues.set(projectId, queued);
+  await previous;
+  try { return await operation(); }
+  finally { release(); if (projectMutationQueues.get(projectId) === queued) projectMutationQueues.delete(projectId); }
+}
+
 async function writeJsonAtomic(filePath: string, value: unknown) {
   const temp = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
@@ -69,7 +82,7 @@ interface SaveProjectOptions {
   writeInitial?: boolean;
 }
 
-export async function saveProject(project: ProjectData, options: SaveProjectOptions = {}): Promise<ProjectData> {
+async function saveProjectFiles(project: ProjectData, options: SaveProjectOptions = {}): Promise<ProjectData> {
   const { touch = true, renderWeb = true, writeInitial = false } = options;
   const directories = await Promise.all([
     safeProjectPath(project.id, "brand"),
@@ -95,12 +108,29 @@ export async function saveProject(project: ProjectData, options: SaveProjectOpti
     writeJsonAtomic(brand, project.brand),
     writeJsonAtomic(tokensJson, project.tokens),
     writeFile(tokensCss, `${tokensToCss(project)}\n`, "utf8"),
-    writeJsonAtomic(deck, project.slides)
+    writeJsonAtomic(deck, project.slideDocument ?? project.slides)
   ];
   if (renderWeb) writes.push(writeFile(landing, renderLandingHtml(project), "utf8"));
   if (writeInitial) writes.push(writeJsonAtomic(initial, project));
   await Promise.all(writes);
   return project;
+}
+
+export function saveProject(project: ProjectData, options: SaveProjectOptions = {}): Promise<ProjectData> {
+  return serializeProject(project.id, () => saveProjectFiles(project, options));
+}
+
+export async function mutateProject(projectId: string, expectedVersion: number, update: (project: ProjectData) => void, options: SaveProjectOptions | ((project: ProjectData) => SaveProjectOptions) = {}) {
+  if (!Number.isInteger(expectedVersion) || expectedVersion < 0) throw new Error("An integer expected project version is required.");
+  await ensureProject(projectId);
+  return serializeProject(projectId, async () => {
+    const manifest = await safeProjectPath(projectId, "project.json");
+    const project = JSON.parse(await readFile(manifest, "utf8")) as ProjectData;
+    if (project.version !== expectedVersion) throw new Error(`Project version conflict: expected ${expectedVersion}, current version is ${project.version}.`);
+    update(project);
+    project.version += 1;
+    return saveProjectFiles(project, typeof options === "function" ? options(project) : options);
+  });
 }
 
 export async function resetProject(projectId = "demo") {

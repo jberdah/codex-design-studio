@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { BrandProfile, DesignTokens, LandingContent, ProjectData } from "@/domain/types";
+import { createSlideDocument } from "@/domain/artifacts";
 import { validHexColors } from "@/server/review";
-import { loadLandingHtml, loadProject, saveProject } from "@/server/store";
+import { loadLandingHtml, loadProject, mutateProject } from "@/server/store";
 import { activeProjectId } from "@/server/paths";
 
 export const runtime = "nodejs";
@@ -13,16 +14,25 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const body = await request.json() as Partial<Pick<ProjectData, "brand" | "tokens" | "landing">>;
-  const project = await loadProject(activeProjectId(request));
-  if (body.brand) project.brand = { ...project.brand, ...body.brand } as BrandProfile;
-  if (body.tokens) project.tokens = { ...project.tokens, ...body.tokens, colors: { ...project.tokens.colors, ...body.tokens.colors }, typography: { ...project.tokens.typography, ...body.tokens.typography }, spacing: { ...project.tokens.spacing, ...body.tokens.spacing }, shape: { ...project.tokens.shape, ...body.tokens.shape } } as DesignTokens;
-  if (body.landing) project.landing = { ...project.landing, ...body.landing } as LandingContent;
-  if (!validHexColors(project.tokens)) return NextResponse.json({ error: "All colour tokens must be six-digit hex values." }, { status: 400 });
-  project.version += 1;
-  project.lastSummary = project.webCustomized
-    ? "Saved the brand system while preserving the custom Web composition."
-    : "Saved the brand system and regenerated both deliverables.";
-  await saveProject(project, { renderWeb: !project.webCustomized });
-  return NextResponse.json({ project, landingHtml: await loadLandingHtml(project.id) });
+  const body = await request.json() as Partial<Pick<ProjectData, "brand" | "tokens" | "landing" | "slides" | "slideDocument">> & { expectedVersion?: number };
+  if (!Number.isInteger(body.expectedVersion) || (body.expectedVersion as number) < 0) return NextResponse.json({ error: "An integer expectedVersion is required for project mutations." }, { status: 400 });
+  if (body.slides !== undefined && !Array.isArray(body.slides)) return NextResponse.json({ error: "Slides must be an array." }, { status: 400 });
+  const projectId = activeProjectId(request);
+  try {
+    const project = await mutateProject(projectId, body.expectedVersion as number, (current) => {
+      if (body.brand) current.brand = { ...current.brand, ...body.brand } as BrandProfile;
+      if (body.tokens) current.tokens = { ...current.tokens, ...body.tokens, colors: { ...current.tokens.colors, ...body.tokens.colors }, typography: { ...current.tokens.typography, ...body.tokens.typography }, spacing: { ...current.tokens.spacing, ...body.tokens.spacing }, shape: { ...current.tokens.shape, ...body.tokens.shape } } as DesignTokens;
+      if (body.landing) current.landing = { ...current.landing, ...body.landing } as LandingContent;
+      if (body.slides) current.slides = structuredClone(body.slides);
+      if (body.slideDocument) current.slideDocument = createSlideDocument(body.slideDocument);
+      if (!validHexColors(current.tokens)) throw new Error("All colour tokens must be six-digit hex values.");
+      current.lastSummary = current.webCustomized
+        ? "Saved the brand system while preserving the custom Web composition."
+        : "Saved the brand system and regenerated both deliverables.";
+    }, (current) => ({ renderWeb: !current.webCustomized }));
+    return NextResponse.json({ project, landingHtml: await loadLandingHtml(project.id) });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Project mutation failed.";
+    return NextResponse.json({ error: message }, { status: /version conflict/i.test(message) ? 409 : 400 });
+  }
 }
