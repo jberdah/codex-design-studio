@@ -1,0 +1,15 @@
+{
+  "serverEntries": [
+    ".next",
+    "node_modules",
+    "package.json",
+    "public",
+    "server.js"
+  ],
+  "requiredServerEntries": [
+    ".next",
+    "node_modules",
+    "package.json",
+    "server.js"
+  ]
+}
