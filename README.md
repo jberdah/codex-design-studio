@@ -5,12 +5,18 @@ Codex Design Studio is a local-first desktop application for creating a brand pr
 The application now includes:
 
 - official Codex App Server authentication with ChatGPT or an OpenAI API key;
-- creation, switching, and isolated persistence of multiple projects;
+- native workspace selection plus creation, switching, and isolated persistence of portable projects;
+- brand bootstrap from manual direction, URLs, documents, logos, images, and local or remote Git repositories;
+- source provenance, conflict reconciliation, immutable BrandSystem versions, and project-owned design-system presets;
+- an extensible catalog covering Web, Slides, Mobile App, Wireframe, Document, Animation, UI Mockups, CV, 3D object, Research, HTML email, Color + Type pairing, Diagram, and Flier;
 - contextual selection inside the live landing-page preview;
 - freeform HTML/CSS/SVG design edits by Codex, beyond tokens and copy fields;
+- stable inline Web text editing and a transactional slide canvas with move, resize, keyboard controls, undo/redo, grouping, alignment, z-order, typography, and colour controls;
+- versioned OpenAI visual generation, comparison, approval, refinement, restore, and placement, using ChatGPT authentication by default;
 - transactional Playwright screenshots at desktop and mobile sizes, pixel diffs, and overflow rejection;
 - a deterministic offline refinement path for the demo-safe semantic contract;
-- responsive HTML ZIP, design-token JSON, and editable PowerPoint exports;
+- responsive HTML ZIP, design-token JSON, and scene-graph-driven editable PowerPoint exports with rendered validation evidence;
+- optional capability-declared GitHub, GitLab, and Bitbucket adapters, reproducible handoffs, durable jobs, project-local skills/templates, and encrypted collaboration controls;
 - an isolated Electron shell with an embedded Next.js server, Codex CLI, and Chromium headless runtime.
 
 ## Requirements
@@ -61,11 +67,12 @@ Electron `userData` contains only private recent-workspace metadata and operatin
 ## Product flow
 
 1. Connect the user’s OpenAI account.
-2. Create a project with its brand, industry, audience, and promise.
-3. Select an element directly in the Web preview.
-4. Ask Codex for a focused adjustment or a complete visual redesign.
-5. Inspect the rendered result and run the design review.
-6. Export HTML, tokens, or an editable deck.
+2. Choose a portable workspace and create a project from brand direction and optional reference sources.
+3. Reconcile extracted evidence, publish a BrandSystem version, and choose a preset or template when useful.
+4. Select an element directly in the Web preview, or open the slide canvas for direct manipulation.
+5. Ask Codex for a focused adjustment, complete visual redesign, or versioned visual asset.
+6. Inspect the rendered comparisons and run the evidence-backed design review.
+7. Export HTML, tokens, or an editable deck; optionally prepare a provider-neutral repository handoff.
 
 Web edits modify the real `web/index.html`. The host captures a baseline first, runs Codex in a project-scoped writable sandbox, verifies that preview instrumentation remains intact, and then renders desktop and mobile comparisons. A failed, timed-out, or overflowing proposal is rolled back.
 
@@ -77,6 +84,8 @@ npm test
 npm run build
 npm run test:e2e
 npm run test:electron
+# or the complete Web verification chain
+npm run check:all
 ```
 
 `npm run test:e2e` uses an isolated `.e2e-workspace` on port 3100 and forces the deterministic path. `npm run test:electron` exercises the context-isolated bridge, relaunch persistence, and revocation; set `CODEX_STUDIO_PACKAGED_APP` to run it against a packaged executable. `npm run test:agent` exercises the live structured App Server path and restores its test project afterward.
@@ -87,8 +96,8 @@ npm run test:electron
 desktop/                  Electron main process and runtime preparation
 projects/                 inspectable development project workspaces
 skills/                   brand and Web art-direction workflows
-src/domain/               shared project contract and defaults
-src/server/               storage, renderers, Codex, auth, QA, and exports
+src/domain/               project, artifact, editing, catalog, and integration contracts
+src/server/               storage, extraction, repositories, Codex, auth, QA, jobs, and exports
 src/app/api/              project-scoped HTTP boundary
 src/components/           Studio canvas, project UI, account UI, and chat
 tests/                    unit, renderer, and Chromium journeys
@@ -98,4 +107,4 @@ See [the architecture](docs/architecture.md), [the demo script](docs/demo-script
 
 ## Deliberate limits
 
-This build is local-first and single-user per machine. It does not yet include cloud synchronization, team collaboration, signing/notarization, auto-update, or Windows packaging. The account belongs to the current OS user and project data remains local.
+This build is local-first and single-user by default. Collaboration and repository providers are explicit opt-in extensions; there is no hosted cloud synchronization service. Signing/notarization, auto-update, Apple Silicon universal packaging, and Windows packaging remain release work. The account belongs to the current OS user and project data remains local unless the user deliberately enables an external capability.
