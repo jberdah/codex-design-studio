@@ -6,6 +6,7 @@ import {
   createWebDocument,
   generateCreativeDirections,
   type ArtifactActor,
+  type ArtifactActionCapabilities,
   type ArtifactApprovalStatus,
   type ArtifactBranch,
   type ArtifactComment,
@@ -69,8 +70,16 @@ async function storage(projectId: string) {
 
 function builtInKinds(at: string): ArtifactKindRegistration[] {
   return [
-    { kind: "web", label: "Web document", documentModel: "code-native-html", capabilities: ["responsive", "media", "semantic-tokens"], registeredAt: at },
-    { kind: "slides", label: "Slide document", documentModel: "physical-scene-graph", capabilities: ["physical-layout", "editable-text", "media", "semantic-tokens"], registeredAt: at }
+    {
+      kind: "web", label: "Web document", documentModel: "code-native-html", adapterId: "web-v1",
+      capabilities: ["responsive", "media", "semantic-tokens"],
+      actions: { create: true, edit: true, preview: true, animate: false, export: true, exportFormats: ["html", "zip"] }, registeredAt: at
+    },
+    {
+      kind: "slides", label: "Slide document", documentModel: "physical-scene-graph", adapterId: "slides-v1",
+      capabilities: ["physical-layout", "editable-text", "media", "semantic-tokens"],
+      actions: { create: true, edit: true, preview: true, animate: false, export: true, exportFormats: ["pptx", "pdf"] }, registeredAt: at
+    }
   ];
 }
 
@@ -95,8 +104,10 @@ function assertIdentifier(value: string, label: string) {
 export async function registerArtifactKind(projectId: string, input: Omit<ArtifactKindRegistration, "registeredAt">, options: { clock?: () => Date } = {}) {
   return mutateArtifacts(projectId, async () => {
     assertIdentifier(input.kind, "Artifact kind");
+    if (input.adapterId) assertIdentifier(input.adapterId, "Artifact adapter id");
     if (!input.label.trim() || input.label.length > 200 || !input.documentModel.trim() || input.documentModel.length > 200) throw new Error("Artifact kind label and document model must contain at most 200 characters.");
     if (new Set(input.capabilities).size !== input.capabilities.length) throw new Error("Artifact kind capabilities must be unique.");
+    validateActionCapabilities(input.actions);
     const files = await storage(projectId);
     const registry = await loadArtifactRegistry(projectId);
     if (registry.kinds.some((kind) => kind.kind === input.kind)) throw new Error(`Artifact kind ${input.kind} is already registered.`);
@@ -107,6 +118,24 @@ export async function registerArtifactKind(projectId: string, input: Omit<Artifa
     await atomicJson(files.registry, registry);
     return registration;
   });
+}
+
+function validateActionCapabilities(actions?: ArtifactActionCapabilities) {
+  if (!actions) return;
+  for (const action of ["create", "edit", "preview", "animate", "export"] as const) {
+    if (typeof actions[action] !== "boolean") throw new Error(`Artifact action ${action} must be boolean.`);
+  }
+  if (!Array.isArray(actions.exportFormats) || actions.exportFormats.some((format) => typeof format !== "string" || !/^[a-z0-9][a-z0-9.+-]{0,31}$/i.test(format))) throw new Error("Artifact export formats are invalid.");
+  if (new Set(actions.exportFormats).size !== actions.exportFormats.length) throw new Error("Artifact export formats must be unique.");
+  if (!actions.export && actions.exportFormats.length) throw new Error("An adapter without export support cannot advertise export formats.");
+}
+
+export async function assertArtifactAction(projectId: string, kind: ArtifactKind, action: keyof Omit<ArtifactActionCapabilities, "exportFormats">, format?: string) {
+  const registration = (await loadArtifactRegistry(projectId)).kinds.find((item) => item.kind === kind);
+  if (!registration) throw new Error(`Artifact kind ${kind} is not registered.`);
+  if (!registration.actions?.[action]) throw new Error(`Artifact kind ${kind} does not support ${action}.`);
+  if (action === "export" && format && !registration.actions.exportFormats.includes(format)) throw new Error(`Artifact kind ${kind} cannot export ${format}.`);
+  return registration;
 }
 
 async function assertPublishedBrandSystem(projectId: string, versionId: string) {

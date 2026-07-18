@@ -46,7 +46,7 @@ function stable(value: unknown): unknown {
 function serialize(value: unknown) { return JSON.stringify(stable(value)); }
 function hash(value: unknown) { return createHash("sha256").update(serialize(value)).digest("hex"); }
 
-function validateBrandSystemContent(brand: ProjectData["brand"], tokens: ProjectData["tokens"]) {
+export function validateBrandSystemContent(brand: ProjectData["brand"], tokens: ProjectData["tokens"]) {
   if (!brand || typeof brand !== "object" || !tokens || typeof tokens !== "object") throw new Error("A complete brand profile and token set are required.");
   if (JSON.stringify({ brand, tokens }).length > 250_000) throw new Error("BrandSystem input exceeds the 250 KB limit.");
   const string = (value: unknown, label: string, max = 2_000) => {
