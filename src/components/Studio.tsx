@@ -5,8 +5,9 @@ import type { ProjectData, ProjectSummary, ReviewReport, SelectionContext } from
 import type { EvidenceDirective, EvidenceKind, ProvenanceGraph, SourceIntent, SourceKind } from "@/domain/sources";
 import type { ArtifactKind, BrandSystemRegistry, ReconciliationAction, ReconciliationReview } from "@/domain/brand-system";
 import { SlidePreview } from "./SlidePreview";
+import { VisualAssetStudio } from "./VisualAssetStudio";
 
-type Surface = "sources" | "reconcile" | "brand" | "system" | "web" | "slides";
+type Surface = "sources" | "reconcile" | "brand" | "system" | "assets" | "web" | "slides";
 type ApiProject = { project: ProjectData; landingHtml: string };
 type AccountState = { account: null | { type: "apiKey" } | { type: "chatgpt"; email: string | null; planType: string }; requiresOpenaiAuth: boolean };
 
@@ -15,6 +16,7 @@ const nav: Array<{ id: Surface; label: string; glyph: string }> = [
   { id: "reconcile", label: "Reconcile", glyph: "≋" },
   { id: "brand", label: "Brand", glyph: "✦" },
   { id: "system", label: "Design system", glyph: "◫" },
+  { id: "assets", label: "Visual assets", glyph: "◉" },
   { id: "web", label: "Landing page", glyph: "⌁" },
   { id: "slides", label: "Presentation", glyph: "▰" }
 ];
@@ -391,6 +393,7 @@ export function Studio() {
               <footer><button onClick={() => decideReconciliation(group.id, "override")}>Override value</button><button className="danger" onClick={() => decideReconciliation(group.id, "reject")}>Reject group</button>{group.resolved && <span>✓ Resolved{group.resolvedValue !== undefined ? ` · ${typeof group.resolvedValue === "string" ? group.resolvedValue : "custom value"}` : ""}</span>}</footer>
             </article>) : <div className="source-empty">No extracted candidates yet. Process sources or add manual evidence first.</div>}</div>
           </div>}
+          {surface === "assets" && <VisualAssetStudio projectId={projectId} project={project} brandSystems={systemRegistry} onBusy={setBusy} onToast={setToast}/>}
           {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={data.landingHtml} sandbox="allow-scripts"/></div>}
           {surface === "slides" && <div className="slides-canvas"><div className="slides-stage"><SlidePreview slide={project.slides[activeSlide]} tokens={project.tokens} brandName={project.brand.name} index={activeSlide} active onClick={() => undefined}/></div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={activeSlide === index} onClick={() => setActiveSlide(index)}/></div>)}</div></div>}
           {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Review before release.</h1><p>The profile guides every creative decision and is published only through a versioned draft.</p></div><button className="primary-button" onClick={saveSystem}>Save draft</button></div><div className="form-grid">

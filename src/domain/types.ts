@@ -1,4 +1,5 @@
 export * from "./repository";
+export * from "./visual-assets";
 
 export type DeliverableType = "web" | "slides";
 
