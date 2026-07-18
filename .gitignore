@@ -9,7 +9,7 @@ coverage/
 .DS_Store
 *.log
 *.tsbuildinfo
-claude-desktop-asar.zip
+.local-reference-assets/
 .brainclaw/
 projects/*/history/
 projects/*/exports/

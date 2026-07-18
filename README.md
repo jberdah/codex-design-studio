@@ -22,6 +22,24 @@ The application now includes:
 - optional capability-declared GitHub, GitLab, and Bitbucket adapters, reproducible handoffs, durable jobs, project-local skills/templates, and encrypted collaboration controls;
 - an isolated Electron shell with an embedded Next.js server, Codex CLI, and Chromium headless runtime.
 
+## How Codex and GPT-5.6 are used
+
+Codex App Server is the application's agent runtime and authentication bridge.
+The default model, `gpt-5.6-sol`, receives the active BrandSystem, selected
+visual context, current artifact source, and the user's creative instruction.
+It is used to:
+
+- edit the actual project-scoped HTML, CSS, and SVG rather than describe a hypothetical change;
+- produce schema-constrained brand refinements and resumable project threads;
+- turn immutable brand evidence into structured visual briefs; and
+- invoke native image generation through the user's ChatGPT/Codex account.
+
+The host application—not the model—owns persistence and acceptance. It checks
+source diffs, renders responsive Playwright evidence, rejects overflow or lost
+preview instrumentation, rolls back failed proposals, and records immutable
+asset and export versions. This keeps GPT-5.6 creative while making every
+accepted result inspectable and testable.
+
 ## Requirements
 
 - macOS x64 for the currently configured desktop target;
