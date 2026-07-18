@@ -1,6 +1,8 @@
 export * from "./repository";
 export * from "./visual-assets";
 
+import type { SlideDocument } from "./artifacts";
+
 export type DeliverableType = "web" | "slides";
 
 export interface BrandProfile {
@@ -95,6 +97,8 @@ export interface ProjectData {
   tokens: DesignTokens;
   landing: LandingContent;
   slides: SlideSpec[];
+  /** Canonical scene graph for direct manipulation; structured slides remain export-compatible. */
+  slideDocument?: SlideDocument;
   threadId?: string;
   version: number;
   lastSummary?: string;

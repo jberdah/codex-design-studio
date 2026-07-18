@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { BrandProfile, DesignTokens, LandingContent, ProjectData } from "@/domain/types";
+import { createSlideDocument } from "@/domain/artifacts";
 import { validHexColors } from "@/server/review";
 import { loadLandingHtml, loadProject, saveProject } from "@/server/store";
 import { activeProjectId } from "@/server/paths";
@@ -13,11 +14,14 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const body = await request.json() as Partial<Pick<ProjectData, "brand" | "tokens" | "landing">>;
+  const body = await request.json() as Partial<Pick<ProjectData, "brand" | "tokens" | "landing" | "slides" | "slideDocument">> & { expectedVersion?: number };
   const project = await loadProject(activeProjectId(request));
+  if (body.expectedVersion !== undefined && body.expectedVersion !== project.version) return NextResponse.json({ error: `Project version conflict: expected ${body.expectedVersion}, current version is ${project.version}.`, project }, { status: 409 });
   if (body.brand) project.brand = { ...project.brand, ...body.brand } as BrandProfile;
   if (body.tokens) project.tokens = { ...project.tokens, ...body.tokens, colors: { ...project.tokens.colors, ...body.tokens.colors }, typography: { ...project.tokens.typography, ...body.tokens.typography }, spacing: { ...project.tokens.spacing, ...body.tokens.spacing }, shape: { ...project.tokens.shape, ...body.tokens.shape } } as DesignTokens;
   if (body.landing) project.landing = { ...project.landing, ...body.landing } as LandingContent;
+  if (body.slides) project.slides = structuredClone(body.slides);
+  if (body.slideDocument) project.slideDocument = createSlideDocument(body.slideDocument);
   if (!validHexColors(project.tokens)) return NextResponse.json({ error: "All colour tokens must be six-digit hex values." }, { status: 400 });
   project.version += 1;
   project.lastSummary = project.webCustomized

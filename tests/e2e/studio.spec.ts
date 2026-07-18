@@ -61,3 +61,45 @@ test("creates and opens an isolated brand project", async ({ page }) => {
   await expect(page.getByLabel("Active project")).toHaveValue(/orbit-e2e/);
   await expect(page.locator("iframe").contentFrame().getByRole("heading", { level: 1 })).toContainText("Turn direction into tested artifacts");
 });
+
+test("edits slide scene nodes with keyboard, undo and autosaved source persistence", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?project=e2e");
+  await page.getByRole("button", { name: /Presentation/ }).click();
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+
+  const canvas = page.getByRole("application", { name: /Slide 1 canvas/ });
+  const title = page.locator('[data-node-id="slide-cover:title"]');
+  await title.click();
+  await canvas.focus();
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(page.locator(".artifact-edit-feedback")).toContainText("Nudged 1 element");
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(page.locator(".artifact-edit-feedback")).toContainText("Undid Nudged 1 element");
+
+  const save = page.waitForResponse((response) => response.url().includes("/api/project?project=e2e") && response.request().method() === "PUT");
+  await title.locator("span").fill("A directly edited launch story");
+  await title.locator("span").press("Tab");
+  await save;
+  await expect(page.locator(".artifact-edit-toolbar")).toContainText("Autosaved");
+
+  await page.reload();
+  await page.getByRole("button", { name: /Presentation/ }).click();
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+  await expect(page.locator('[data-node-id="slide-cover:title"]')).toContainText("A directly edited launch story");
+});
+
+test("inline-edits a stable Web design id and preserves it after reload", async ({ page }) => {
+  await page.goto("/?project=e2e");
+  const preview = page.frameLocator('iframe[title="Generated landing page"]');
+  const title = preview.locator('[data-design-id="hero-title"]');
+  await title.dblclick();
+  const save = page.waitForResponse((response) => response.url().includes("/api/project?project=e2e") && response.request().method() === "PUT");
+  await title.fill("A Web headline edited in place");
+  await title.press("Tab");
+  await save;
+  await expect(page.getByText("Inline text saved to source.")).toBeVisible();
+
+  await page.reload();
+  await expect(page.frameLocator('iframe[title="Generated landing page"]').locator('[data-design-id="hero-title"]')).toHaveText("A Web headline edited in place");
+});

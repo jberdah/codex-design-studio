@@ -95,7 +95,7 @@ export async function saveProject(project: ProjectData, options: SaveProjectOpti
     writeJsonAtomic(brand, project.brand),
     writeJsonAtomic(tokensJson, project.tokens),
     writeFile(tokensCss, `${tokensToCss(project)}\n`, "utf8"),
-    writeJsonAtomic(deck, project.slides)
+    writeJsonAtomic(deck, project.slideDocument ?? project.slides)
   ];
   if (renderWeb) writes.push(writeFile(landing, renderLandingHtml(project), "utf8"));
   if (writeInitial) writes.push(writeJsonAtomic(initial, project));
