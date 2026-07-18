@@ -64,7 +64,7 @@ src/components/            Studio canvas, contextual chat, and slide previews
 tests/                     domain/export tests and Chromium journeys
 ```
 
-See [the architecture](docs/architecture.md) for runtime boundaries and deliberate MVP trade-offs, and [the demo script](docs/demo-script.md) for the submission recording.
+See [the architecture](docs/architecture.md) for runtime boundaries and deliberate MVP trade-offs, [the demo script](docs/demo-script.md) for the submission recording, and [the verification record](docs/verification.md) for the preserved App Server session and test evidence.
 
 ## Current scope
 
