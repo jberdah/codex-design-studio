@@ -1,7 +1,9 @@
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import JSZip from "jszip";
 import { NextResponse } from "next/server";
 import { activeProjectId, safeProjectPath } from "@/server/paths";
+import { validatePresentationExport } from "@/server/presentation-validation";
 import { generatePptx } from "@/server/slides";
 import { loadProject } from "@/server/store";
 
@@ -12,7 +14,18 @@ export async function GET(request: Request, { params }: { params: Promise<{ type
   const project = await loadProject(activeProjectId(request));
   if (type === "pptx") {
     const buffer = await generatePptx(project);
-    return new NextResponse(new Uint8Array(buffer), { headers: { "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation", "content-disposition": `attachment; filename="${project.brand.name.toLowerCase()}-launch-deck.pptx"` } });
+    const validationRoot = await safeProjectPath(project.id, "reviews", "presentation");
+    await mkdir(validationRoot, { recursive: true });
+    const evidenceDirectory = await mkdtemp(path.join(validationRoot, "export-"));
+    const validation = await validatePresentationExport(buffer, { outputDir: evidenceDirectory, render: true });
+    await writeFile(path.join(evidenceDirectory, "report.json"), `${JSON.stringify(validation, null, 2)}\n`, "utf8");
+    await writeFile(path.join(validationRoot, "latest.json"), `${JSON.stringify(validation, null, 2)}\n`, "utf8");
+    return new NextResponse(new Uint8Array(buffer), { headers: {
+      "content-type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      "content-disposition": `attachment; filename="${project.brand.name.toLowerCase()}-launch-deck.pptx"`,
+      "x-codex-validation-mode": validation.capability.mode,
+      "x-codex-rendered": String(validation.rendered)
+    } });
   }
   if (type === "tokens") {
     return NextResponse.json(project.tokens, { headers: { "content-disposition": `attachment; filename="${project.brand.name.toLowerCase()}-design-system.json"` } });
