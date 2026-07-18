@@ -347,8 +347,27 @@ export interface ArtifactKindRegistration {
   label: string;
   documentModel: string;
   capabilities: Array<"responsive" | "physical-layout" | "editable-text" | "media" | "semantic-tokens">;
+  /** Runtime operations implemented by this kind's adapter. Omitted registrations are read-only. */
+  actions?: ArtifactActionCapabilities;
+  adapterId?: string;
   registeredAt: string;
 }
+
+export type ArtifactAction = "create" | "edit" | "preview" | "animate" | "export";
+
+/** Actions are deliberately independent: support for preview never implies edit or export. */
+export interface ArtifactActionCapabilities {
+  create: boolean;
+  edit: boolean;
+  preview: boolean;
+  animate: boolean;
+  export: boolean;
+  exportFormats: string[];
+}
+
+export const NO_ARTIFACT_ACTIONS: ArtifactActionCapabilities = {
+  create: false, edit: false, preview: false, animate: false, export: false, exportFormats: []
+};
 
 export interface ArtifactBranch {
   id: ArtifactBranchId;
