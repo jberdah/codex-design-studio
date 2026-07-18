@@ -70,6 +70,12 @@ test("edits slide scene nodes with keyboard, undo and autosaved source persisten
 
   const canvas = page.getByRole("listbox", { name: /Slide 1 canvas/ });
   const title = page.locator('.artifact-canvas-editor [data-node-id="slide-cover:title"]');
+  const body = page.locator('.artifact-canvas-editor [data-node-id="slide-cover:body"]');
+  const titleBox = await title.boundingBox();
+  const bodyBox = await body.boundingBox();
+  expect(titleBox).not.toBeNull();
+  expect(bodyBox).not.toBeNull();
+  expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(bodyBox!.y);
   await title.click();
   await canvas.focus();
   await page.keyboard.press("Shift+ArrowRight");

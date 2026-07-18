@@ -14,7 +14,7 @@ export function projectSlideDocument(project: ProjectData): SlideDocument {
         { id: `${slide.id}:background`, type: "shape", shape: "rectangle", fill: project.tokens.colors.background, frame: { x: 0, y: 0, width: 960, height: 540 }, zIndex: 0 },
         text(`${slide.id}:brand`, project.brand.name.toUpperCase(), 44, 28, 300, 20, 1, { fontFamily: project.tokens.typography.body, fontSize: 12, fontWeight: 700, color: project.tokens.colors.primary }),
         text(`${slide.id}:eyebrow`, slide.eyebrow, 72, 128, 620, 24, 2, { fontFamily: project.tokens.typography.body, fontSize: 13, fontWeight: 700, color: project.tokens.colors.secondary, letterSpacing: 2 }),
-        text(`${slide.id}:title`, slide.title, 72, 164, slide.type === "cover" ? 680 : 760, 155, 3, { fontFamily: project.tokens.typography.display, fontSize: slide.type === "cover" ? 54 : 42, fontWeight: 700, lineHeight: 1.02, color: project.tokens.colors.text }),
+        text(`${slide.id}:title`, slide.title, 72, 164, slide.type === "cover" ? 680 : 760, 165, 3, { fontFamily: project.tokens.typography.display, fontSize: slide.type === "cover" ? 50 : 42, fontWeight: 700, lineHeight: 1.02, color: project.tokens.colors.text }),
         ...(slide.body ? [text(`${slide.id}:body`, slide.body, 74, 340, 600, 75, 4, { fontFamily: project.tokens.typography.body, fontSize: 18, lineHeight: 1.35, color: project.tokens.colors.text })] : []),
         ...(slide.bullets ? [text(`${slide.id}:bullets`, slide.bullets.map((item) => `• ${item}`).join("\n"), 74, 326, 690, 130, 4, { fontFamily: project.tokens.typography.body, fontSize: 18, lineHeight: 1.55, color: project.tokens.colors.text })] : []),
         ...(slide.metrics ?? []).flatMap((metric, metricIndex) => [

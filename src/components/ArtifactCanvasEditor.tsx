@@ -50,10 +50,10 @@ function nodeStyle(node: SlideNode, width: number, height: number, gesture?: Ges
   if (node.type === "text") Object.assign(style, {
     color: node.style?.color,
     fontFamily: node.style?.fontFamily,
-    fontSize: node.style?.fontSize ? `${node.style.fontSize}px` : undefined,
+    fontSize: node.style?.fontSize ? `${node.style.fontSize / width * 100}cqw` : undefined,
     fontWeight: node.style?.fontWeight,
     lineHeight: node.style?.lineHeight,
-    letterSpacing: node.style?.letterSpacing ? `${node.style.letterSpacing}px` : undefined,
+    letterSpacing: node.style?.letterSpacing ? `${node.style.letterSpacing / width * 100}cqw` : undefined,
     textAlign: node.style?.align
   });
   if (node.type === "shape") Object.assign(style, {
