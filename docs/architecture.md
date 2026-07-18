@@ -49,6 +49,8 @@ Any agent failure, timeout, removed instrumentation, render failure, or horizont
 
 Each project is an isolated directory inside the authorized portable workspace, with atomic JSON writes, generated brand/token/slide sources, the editable Web artifact, visual reviews, exports, history, and an immutable initial snapshot used by **Restore project**. API routes resolve only a validated project ID from the request, new project IDs use collision-safe slugs, and realpath validation rejects traversal and symlink escapes. The manifest, registry schema, migration rules, and recovery behavior are specified in [portable-workspaces.md](portable-workspaces.md).
 
+Brand bootstrap inputs live in a separate, portable provenance sidecar. `sources/graph.json` holds the versioned Source → ExtractionRun → Candidate → Evidence graph and its audit trail; `sources/blobs/<sha256>` preserves content-addressed originals; and `sources/runs/<run-id>.json` checkpoints every durable extraction job. Re-adding identical bytes reuses the source and blob, removal is a tombstone, and retry/refresh/reprocess create new runs. These operations never write `project.json`, generated Web, slides, or published design tokens. Manual colours, fonts, tone, accessibility constraints, and must-use/must-avoid rules enter the same graph as evidence with explicit intent, rights notes, and manual confidence.
+
 ## Remaining production work
 
 The current package is a macOS x64, local-first submission build. A commercial release would add code signing and notarization, per-platform installers, auto-update, crash reporting with consent, encrypted cloud sync, collaboration, storage quotas, and a supervised job queue for concurrent agent work.

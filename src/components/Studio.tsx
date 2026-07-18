@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectData, ProjectSummary, ReviewReport, SelectionContext } from "@/domain/types";
+import type { EvidenceDirective, EvidenceKind, ProvenanceGraph, SourceIntent, SourceKind } from "@/domain/sources";
 import { SlidePreview } from "./SlidePreview";
 
-type Surface = "brand" | "system" | "web" | "slides";
+type Surface = "sources" | "brand" | "system" | "web" | "slides";
 type ApiProject = { project: ProjectData; landingHtml: string };
 type AccountState = { account: null | { type: "apiKey" } | { type: "chatgpt"; email: string | null; planType: string }; requiresOpenaiAuth: boolean };
 
 const nav: Array<{ id: Surface; label: string; glyph: string }> = [
+  { id: "sources", label: "Sources", glyph: "⊕" },
   { id: "brand", label: "Brand", glyph: "✦" },
   { id: "system", label: "Design system", glyph: "◫" },
   { id: "web", label: "Landing page", glyph: "⌁" },
@@ -34,6 +36,12 @@ export function Studio() {
   const [mobile, setMobile] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [agent, setAgent] = useState<{ available: boolean; model: string; cliVersion: string }>();
+  const [provenance, setProvenance] = useState<ProvenanceGraph>();
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceIntent, setSourceIntent] = useState<SourceIntent>("extract");
+  const [rightsNotes, setRightsNotes] = useState("");
+  const [rightsConfirmed, setRightsConfirmed] = useState(false);
+  const [manualEvidence, setManualEvidence] = useState<{ kind: EvidenceKind; value: string; directive: EvidenceDirective }>({ kind: "color", value: "", directive: "must-use" });
   const [messages, setMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
     { role: "assistant", text: "Your brand system is ready. Select anything in the landing preview, then describe what should change." }
   ]);
@@ -44,14 +52,22 @@ export function Studio() {
     setData(await response.json() as ApiProject);
   }, []);
 
+  const loadSources = useCallback(async (id: string) => {
+    const response = await fetch(`/api/sources?project=${encodeURIComponent(id)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("Could not load project sources.");
+    const result = await response.json() as { graph: ProvenanceGraph };
+    setProvenance(result.graph);
+  }, []);
+
   useEffect(() => {
     const initialProject = new URL(window.location.href).searchParams.get("project") ?? "demo";
     setProjectId(initialProject);
     load(initialProject).catch((error) => setToast(error.message));
+    loadSources(initialProject).catch((error) => setToast(error.message));
     fetch("/api/projects", { cache: "no-store" }).then((response) => response.json()).then((result) => setProjects(result.projects ?? [])).catch(() => undefined);
     fetch("/api/account", { cache: "no-store" }).then((response) => response.json()).then(setAccount).catch(() => setAccount({ account: null, requiresOpenaiAuth: true }));
     fetch("/api/agent/status").then((response) => response.json()).then(setAgent).catch(() => undefined);
-  }, [load]);
+  }, [load, loadSources]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -124,7 +140,73 @@ export function Studio() {
     setProjectId(id);
     window.history.replaceState({}, "", `/?project=${encodeURIComponent(id)}`);
     setData(null); setSelection(undefined); setReview(undefined);
-    await load(id);
+    await Promise.all([load(id), loadSources(id)]);
+  }
+
+  async function addUrlSource() {
+    if (!sourceUrl.trim()) return;
+    setBusy("Adding source");
+    try {
+      const response = await fetch(apiForProject("/api/sources"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url: sourceUrl, intent: sourceIntent, rightsNotes, rightsConfirmed }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not add source.");
+      setSourceUrl("");
+      await loadSources(projectId);
+      setToast(result.deduplicated ? "Duplicate source linked to the existing original." : "Source added and extraction queued.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not add source."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function addFiles(files: FileList | null, kind?: SourceKind) {
+    if (!files?.length) return;
+    setBusy(`Adding ${files.length} source${files.length === 1 ? "" : "s"}`);
+    try {
+      let duplicates = 0;
+      for (const file of Array.from(files)) {
+        const body = new FormData();
+        body.set("file", file); body.set("intent", sourceIntent); body.set("rightsNotes", rightsNotes); body.set("rightsConfirmed", String(rightsConfirmed));
+        if (kind) body.set("kind", kind);
+        const response = await fetch(apiForProject("/api/sources"), { method: "POST", body });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error ?? `Could not add ${file.name}.`);
+        if (result.deduplicated) duplicates += 1;
+      }
+      await loadSources(projectId);
+      setToast(duplicates ? `${files.length} sources processed · ${duplicates} duplicate${duplicates === 1 ? "" : "s"}.` : `${files.length} source${files.length === 1 ? "" : "s"} queued.`);
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not add source files."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function sourceAction(sourceId: string, action: "retry" | "refresh" | "reprocess" | "remove") {
+    setBusy(`${action[0].toUpperCase()}${action.slice(1)} source`);
+    try {
+      const response = await fetch(apiForProject(`/api/sources/${encodeURIComponent(sourceId)}`), action === "remove" ? { method: "DELETE" } : { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Source action failed.");
+      await loadSources(projectId);
+      setToast(action === "remove" ? "Source removed; its original remains recoverable." : "Extraction queued.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Source action failed."); }
+    finally { setBusy(undefined); }
+  }
+
+  async function cancelRun(runId: string) {
+    const response = await fetch(apiForProject(`/api/extraction-runs/${encodeURIComponent(runId)}`), { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "cancelled" }) });
+    const result = await response.json();
+    if (!response.ok) return setToast(result.error ?? "Could not cancel extraction.");
+    await loadSources(projectId); setToast("Extraction cancelled.");
+  }
+
+  async function addEvidence() {
+    if (!manualEvidence.value.trim()) return;
+    setBusy("Recording evidence");
+    try {
+      const response = await fetch(apiForProject("/api/evidence"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...manualEvidence, intent: sourceIntent, rightsNotes }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not add evidence.");
+      setManualEvidence((current) => ({ ...current, value: "" }));
+      await loadSources(projectId); setToast("Manual evidence added with explicit provenance.");
+    } catch (error) { setToast(error instanceof Error ? error.message : "Could not add evidence."); }
+    finally { setBusy(undefined); }
   }
 
   async function createNewProject() {
@@ -195,8 +277,48 @@ export function Studio() {
         <div className="side-bottom"><div className="agent-state"><span className="agent-pulse"/><div><strong>{agent?.available ? "Codex connected" : "Checking Codex"}</strong><small>{agent ? `${agent.model} · CLI ${agent.cliVersion}` : "App Server"}</small></div></div></div>
       </aside>
       <section className="workspace">
-        <div className="workspace-bar"><div><small>{surface === "system" ? "SOURCE OF TRUTH" : "ACTIVE DELIVERABLE"}</small><strong>{surfaceTitle}</strong></div>{surface === "web" && <div className="viewport-toggle"><button className={!mobile ? "active" : ""} onClick={() => setMobile(false)}>Desktop</button><button className={mobile ? "active" : ""} onClick={() => setMobile(true)}>Mobile</button></div>}<div className="workspace-meta"><span>Synced with tokens</span><b>●</b></div></div>
+        <div className="workspace-bar"><div><small>{surface === "sources" || surface === "system" ? "SOURCE OF TRUTH" : "ACTIVE DELIVERABLE"}</small><strong>{surfaceTitle}</strong></div>{surface === "web" && <div className="viewport-toggle"><button className={!mobile ? "active" : ""} onClick={() => setMobile(false)}>Desktop</button><button className={mobile ? "active" : ""} onClick={() => setMobile(true)}>Mobile</button></div>}<div className="workspace-meta"><span>{surface === "sources" ? `${provenance?.sources.filter((source) => source.status !== "deleted").length ?? 0} active sources` : "Synced with tokens"}</span><b>●</b></div></div>
         <div className="canvas-area">
+          {surface === "sources" && <div className="sources-page">
+            <div className="editor-heading"><div><small>BRAND BOOTSTRAP</small><h1>Build from evidence.</h1><p>Add originals, decide how Codex may use them, and keep every extracted claim traceable.</p></div></div>
+            <div className="source-intake-grid">
+              <section className="source-panel">
+                <h2>Add source material</h2>
+                <div className="url-row"><input aria-label="Source URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} placeholder="https://brand.example.com"/><button onClick={addUrlSource} disabled={!sourceUrl.trim()}>Add URL</button></div>
+                <div className="source-drop-grid">
+                  <label><span>◫</span><strong>Logos & images</strong><small>PNG, JPG, SVG, screenshots</small><input type="file" accept="image/*,.svg" multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }}/></label>
+                  <label><span>▤</span><strong>Documents & decks</strong><small>PDF, DOCX, PPTX, spreadsheets</small><input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.key,.xls,.xlsx,.csv,.ods" multiple onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }}/></label>
+                  <label><span>⌘</span><strong>Local codebase</strong><small>Upload a portable ZIP or archive</small><input type="file" accept=".zip,.tar,.gz,.tgz" onChange={(event) => { addFiles(event.target.files, "codebase"); event.target.value = ""; }}/></label>
+                </div>
+                <div className="source-options">
+                  <label>Use intent<select value={sourceIntent} onChange={(event) => setSourceIntent(event.target.value as SourceIntent)}><option value="extract">Extract facts</option><option value="inspire">Inspiration only</option><option value="extract-and-inspire">Extract + inspire</option></select></label>
+                  <label>Rights / licence notes<input value={rightsNotes} onChange={(event) => setRightsNotes(event.target.value)} placeholder="Owned by client; internal use"/></label>
+                  <label className="rights-check"><input type="checkbox" checked={rightsConfirmed} onChange={(event) => setRightsConfirmed(event.target.checked)}/> I confirm this material may be processed</label>
+                </div>
+              </section>
+              <section className="source-panel manual-panel">
+                <h2>Add first-class evidence</h2>
+                <p>Record human direction with 100% confidence.</p>
+                <label>Evidence type<select value={manualEvidence.kind} onChange={(event) => setManualEvidence((current) => ({ ...current, kind: event.target.value as EvidenceKind }))}><option value="color">Colour</option><option value="font">Font</option><option value="tone">Tone</option><option value="accessibility">Accessibility constraint</option><option value="rule">Explicit rule</option></select></label>
+                <label>Direction<textarea value={manualEvidence.value} onChange={(event) => setManualEvidence((current) => ({ ...current, value: event.target.value }))} placeholder={manualEvidence.kind === "color" ? "#215C4B for primary actions" : manualEvidence.kind === "accessibility" ? "All text must meet WCAG AA" : "Describe the evidence…"}/></label>
+                <label>Strength<select value={manualEvidence.directive} onChange={(event) => setManualEvidence((current) => ({ ...current, directive: event.target.value as EvidenceDirective }))}><option value="must-use">Must use</option><option value="must-avoid">Must avoid</option><option value="advisory">Advisory</option></select></label>
+                <button className="primary-button" onClick={addEvidence} disabled={!manualEvidence.value.trim()}>Add evidence</button>
+              </section>
+            </div>
+            <section className="source-library">
+              <div className="source-library-head"><div><h2>Source library</h2><span>{provenance?.evidence.length ?? 0} evidence items · {provenance?.extractionRuns.length ?? 0} extraction runs</span></div><code>schema v{provenance?.schemaVersion ?? 1}</code></div>
+              <div className="source-list">{provenance?.sources.length ? provenance.sources.map((source) => {
+                const run = provenance.extractionRuns.find((item) => item.id === source.latestRunId);
+                return <article className={`source-row ${source.status}`} key={source.id}>
+                  <div className="source-kind">{source.kind === "url" ? "↗" : source.kind === "codebase" ? "⌘" : source.kind === "manual" ? "✎" : "▧"}</div>
+                  <div className="source-copy"><strong>{source.label}</strong><span>{source.origin.fileName ?? source.origin.locator ?? source.kind} · {source.intent.replaceAll("-", " ")}</span><code>{source.contentHash.slice(0, 12)}</code></div>
+                  <div className="source-progress"><span className={`status-badge ${source.status}`}>{source.status}</span>{run && <><div><i style={{ width: `${run.progress}%` }}/></div><small>{run.phase} · attempt {run.attempt}{run.error ? ` · ${run.error.message}` : ""}</small></>}</div>
+                  <div className="source-actions">{run && ["queued", "running"].includes(run.status) && <button onClick={() => cancelRun(run.id)}>Cancel</button>}{source.status === "error" && <button onClick={() => sourceAction(source.id, "retry")}>Retry</button>}{source.kind === "url" && source.status !== "deleted" && <button onClick={() => sourceAction(source.id, "refresh")}>Refresh</button>}{source.status !== "deleted" && <button onClick={() => sourceAction(source.id, "reprocess")}>Reprocess</button>}{source.status !== "deleted" && <button className="danger" onClick={() => sourceAction(source.id, "remove")}>Remove</button>}</div>
+                </article>;
+              }) : <div className="source-empty">No sources yet. Add a URL, file, codebase archive, or a manual rule.</div>}</div>
+              {Boolean(provenance?.evidence.length) && <div className="evidence-strip">{provenance?.evidence.map((item) => <div key={item.id}><b>{item.directive}</b><strong>{item.kind}</strong><span>{typeof item.value === "string" ? item.value : JSON.stringify(item.value)}</span><small>{Math.round(item.confidence.score * 100)}% · {item.confidence.method}</small></div>)}</div>}
+            </section>
+          </div>}
           {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={data.landingHtml} sandbox="allow-scripts"/></div>}
           {surface === "slides" && <div className="slides-canvas"><div className="slides-stage"><SlidePreview slide={project.slides[activeSlide]} tokens={project.tokens} brandName={project.brand.name} index={activeSlide} active onClick={() => undefined}/></div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={activeSlide === index} onClick={() => setActiveSlide(index)}/></div>)}</div></div>}
           {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Use everywhere.</h1><p>The profile guides every creative decision Codex makes.</p></div><button className="primary-button" onClick={saveSystem}>Save & propagate</button></div><div className="form-grid">
