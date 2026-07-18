@@ -4,7 +4,8 @@ import { runCodexRefinement, runCodexWebRefinement } from "@/server/codex-client
 import { applyProjectPatch, fallbackRefinement } from "@/server/refine";
 import { loadLandingHtml, loadProject, saveProject, saveProjectManifest, writeLandingHtml } from "@/server/store";
 import { runVisualCheck } from "@/server/visual";
-import { activeProjectId } from "@/server/paths";
+import { activeProjectId, safeProjectPath } from "@/server/paths";
+import { assessWebMutation, runFileRollbackTransaction } from "@/server/quality";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -14,28 +15,35 @@ export async function POST(request: Request) {
   if (typeof instruction !== "string" || !instruction.trim()) return NextResponse.json({ error: "An instruction is required." }, { status: 400 });
   if (instruction.length > 2_000) return NextResponse.json({ error: "The instruction is too long." }, { status: 400 });
   if (!(["auto", "codex", "fallback"] as const).includes(mode)) return NextResponse.json({ error: "Unknown refinement mode." }, { status: 400 });
-  const project = await loadProject(activeProjectId(request));
+  let project = await loadProject(activeProjectId(request));
   let warning: string | undefined;
   if (deliverable === "web" && mode !== "fallback") {
+    const originalProject = structuredClone(project);
     const originalHtml = await loadLandingHtml(project.id);
+    const landingPath = await safeProjectPath(project.id, "web", "index.html");
     try {
-      await runVisualCheck(project.id, "before");
-      const result = await runCodexWebRefinement(project, instruction.trim(), selection);
-      project.threadId = result.threadId;
-      if (result.changed) {
-        project.version += 1;
-        project.lastSummary = result.summary;
-        project.webCustomized = true;
-      }
-      const visual = await runVisualCheck(project.id, "after");
-      if (Object.values(visual.renders).some((render) => render.horizontalOverflow)) {
-        await writeLandingHtml(project.id, originalHtml);
-        return NextResponse.json({ error: "The proposed design overflowed its viewport, so the original artifact was restored." }, { status: 422 });
+      const transaction = await runFileRollbackTransaction(landingPath, async () => {
+        const beforeVisual = await runVisualCheck(project.id, "before");
+        const result = await runCodexWebRefinement(project, instruction.trim(), selection);
+        project.threadId = result.threadId;
+        if (result.changed) {
+          project.version += 1;
+          project.lastSummary = result.summary;
+          project.webCustomized = true;
+        }
+        const visual = await runVisualCheck(project.id, "after");
+        const afterHtml = await loadLandingHtml(project.id);
+        const assessment = assessWebMutation({ beforeSource: originalHtml, afterSource: afterHtml, beforeReport: beforeVisual, report: visual, claimedChanged: result.changed });
+        return { result, visual, assessment, afterHtml };
+      }, ({ assessment }) => assessment.accepted);
+      if (!transaction.committed) {
+        return NextResponse.json({ error: `${transaction.result.assessment.reasons.join(" ")} The original artifact was restored.`, assessment: transaction.result.assessment }, { status: 422 });
       }
       await saveProjectManifest(project);
-      return NextResponse.json({ ...result, project, landingHtml: await loadLandingHtml(project.id), visual });
+      return NextResponse.json({ ...transaction.result.result, project, landingHtml: transaction.result.afterHtml, visual: transaction.result.visual, assessment: transaction.result.assessment });
     } catch (error) {
       await writeLandingHtml(project.id, originalHtml);
+      project = originalProject;
       if (mode === "codex") return NextResponse.json({ error: error instanceof Error ? error.message : "Codex Web refinement failed." }, { status: 502 });
       if (project.webCustomized) return NextResponse.json({ error: "Codex could not safely refine this custom composition; the original artifact was preserved." }, { status: 502 });
       warning = `The direct Web editor was unavailable, so a safe structured refinement was used: ${error instanceof Error ? error.message : "unknown error"}`;

@@ -4,18 +4,14 @@ import { constants } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import readline from "node:readline";
+import type { WebVisualCheckReport } from "@/domain/quality";
 import type { ProjectData, SelectionContext } from "@/domain/types";
 import type { ProjectPatch } from "./refine";
 import { bundleRoot, codexEntrypoint, safeProjectPath, safeProjectRoot } from "./paths";
 
 type RpcMessage = { id?: number; method?: string; result?: unknown; error?: { message?: string }; params?: Record<string, unknown> };
 
-export interface VisualCheckReport {
-  phase: "before" | "after";
-  file: string;
-  renders: Record<string, { viewport: { width: number; height: number }; horizontalOverflow: boolean; pixelDifference?: number | null }>;
-  generatedAt: string;
-}
+export type VisualCheckReport = WebVisualCheckReport;
 
 export interface WebRefinementResult {
   source: "codex";
