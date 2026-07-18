@@ -45,8 +45,7 @@ export function Studio() {
   const [slideDocument, setSlideDocument] = useState<SlideDocument>();
   const [slideEditing, setSlideEditing] = useState(false);
   const projectVersion = useRef(0);
-  const slideSaveQueue = useRef<Promise<void>>(Promise.resolve());
-  const webSaveQueue = useRef<Promise<void>>(Promise.resolve());
+  const projectSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const [agent, setAgent] = useState<{ available: boolean; model: string; cliVersion: string }>();
   const [provenance, setProvenance] = useState<ProvenanceGraph>();
   const [reconciliation, setReconciliation] = useState<ReconciliationReview>();
@@ -83,13 +82,19 @@ export function Studio() {
     setSystemRegistry(result.registry); setReconciliation(result.reconciliation);
   }, []);
 
+  const enqueueProjectSave = useCallback((operation: () => Promise<void>) => {
+    const pending = projectSaveQueue.current.then(operation);
+    projectSaveQueue.current = pending.catch(() => undefined);
+    return pending;
+  }, []);
+
   const persistWebInlineEdit = useCallback((designId: string, text: string) => {
     const field = designId === "hero-title" ? "headline" : designId === "hero-eyebrow" ? "eyebrow" : designId === "hero-copy" ? "subhead" : undefined;
     if (!field) { setToast("This composite element must be edited through its generated controls."); return; }
-    webSaveQueue.current = webSaveQueue.current.then(async () => {
+    void enqueueProjectSave(async () => {
       const response = await fetch(`/api/project?project=${encodeURIComponent(projectId)}`, {
         method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ landing: { [field]: text }, expectedVersion: projectVersion.current })
+        body: JSON.stringify({ landing: { [field]: text }, expectedVersion: projectVersion.current }), keepalive: true
       });
       const result = await response.json() as ApiProject & { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not persist inline text.");
@@ -97,7 +102,7 @@ export function Studio() {
       setData(result);
       setToast("Inline text saved to source.");
     }).catch((error) => setToast(error instanceof Error ? error.message : "Could not persist inline text."));
-  }, [projectId]);
+  }, [enqueueProjectSave, projectId]);
 
   useEffect(() => {
     const initialProject = new URL(window.location.href).searchParams.get("project") ?? "demo";
@@ -236,20 +241,26 @@ export function Studio() {
     await Promise.all([load(id), loadSources(id), loadBrandSystems(id)]);
   }
 
-  function saveSlideCanvas(document: SlideDocument) {
+  async function saveSlideCanvas(document: SlideDocument) {
     setSlideDocument(document);
-    if (!data?.project) return;
+    if (!data?.project) throw new Error("The project is no longer available.");
     const updated = projectWithSlideDocument(data.project, document);
-    slideSaveQueue.current = slideSaveQueue.current.then(async () => {
+    try {
+      await enqueueProjectSave(async () => {
       const response = await fetch(`/api/project?project=${encodeURIComponent(projectId)}`, {
         method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slides: updated.slides, slideDocument: document, expectedVersion: projectVersion.current })
+        body: JSON.stringify({ slides: updated.slides, slideDocument: document, expectedVersion: projectVersion.current }), keepalive: true
       });
       const result = await response.json() as ApiProject & { error?: string };
       if (!response.ok) throw new Error(result.error ?? "Could not persist slide edits.");
       projectVersion.current = result.project.version;
       setData(result);
-    }).catch((error) => setToast(error instanceof Error ? error.message : "Could not persist slide edits."));
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not persist slide edits.";
+      setToast(message);
+      throw new Error(message);
+    }
   }
 
   async function addUrlSource() {
@@ -443,7 +454,7 @@ export function Studio() {
           </div>}
           {surface === "assets" && <VisualAssetStudio projectId={projectId} project={project} brandSystems={systemRegistry} onBusy={setBusy} onToast={setToast}/>}
           {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={data.landingHtml} sandbox="allow-scripts"/></div>}
-          {surface === "slides" && <div className="slides-canvas"><div className="slides-stage"><button className="canvas-edit-toggle" onClick={() => setSlideEditing((current) => !current)}>{slideEditing ? "Done editing" : "Edit canvas"}</button>{slideEditing && slideDocument ? <ArtifactCanvasEditor artifactId="slides" document={slideDocument} slideId={project.slides[activeSlide].id} onChange={(next) => setSlideDocument(next)} onAutosave={saveSlideCanvas}/> : <SlidePreview slide={project.slides[activeSlide]} tokens={project.tokens} brandName={project.brand.name} index={activeSlide} active onClick={() => undefined}/>}</div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={activeSlide === index} onClick={() => setActiveSlide(index)}/></div>)}</div></div>}
+          {surface === "slides" && <div className="slides-canvas"><div className="slides-stage"><button className="canvas-edit-toggle" onClick={() => setSlideEditing((current) => !current)}>{slideEditing ? "Done editing" : "Edit canvas"}</button>{slideEditing && slideDocument ? <ArtifactCanvasEditor artifactId="slides" document={slideDocument} slideId={project.slides[activeSlide].id} onChange={(next) => setSlideDocument(next)} onAutosave={saveSlideCanvas}/> : <SlidePreview slide={project.slides[activeSlide]} tokens={project.tokens} brandName={project.brand.name} index={activeSlide} active onClick={() => undefined} document={slideDocument}/>}</div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={activeSlide === index} onClick={() => setActiveSlide(index)} document={slideDocument}/></div>)}</div></div>}
           {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Review before release.</h1><p>The profile guides every creative decision and is published only through a versioned draft.</p></div><button className="primary-button" onClick={saveSystem}>Save draft</button></div><div className="form-grid">
             <label>Brand name<input value={project.brand.name} onChange={(e) => updateProject((p) => { p.brand.name = e.target.value; return p; })}/></label>
             <label>Industry<input value={project.brand.industry} onChange={(e) => updateProject((p) => { p.brand.industry = e.target.value; return p; })}/></label>

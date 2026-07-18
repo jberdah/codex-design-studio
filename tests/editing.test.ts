@@ -5,8 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSlideDocument, createWebDocument, SLIDE_DIMENSIONS, type SlideDocument, type WebDocument } from "@/domain/artifacts";
 import { defaultProject } from "@/domain/defaults";
 import { projectSlideDocument, projectWithSlideDocument } from "@/domain/slide-editing";
+import { buildWebEditorPreview } from "@/components/WebArtifactEditor";
 import {
   GENERATED_ARTIFACT_CONTROLS,
+  EDIT_LIMITS,
   applyArtifactEdits,
   applyEditTransaction,
   createArtifactEditSession,
@@ -102,6 +104,32 @@ describe("artifact direct editing", () => {
     expect(() => applyArtifactEdits(source, [{ type: "web.style", nodeIds: ["hero"], declarations: { position: "fixed" }, scope: "shared" }])).toThrow("not editable");
     expect(() => applyArtifactEdits(source, [{ type: "web.text", nodeId: "hero", text: "Replace nested markup" }])).toThrow("text-only");
   });
+
+  it("treats replacement tokens as literal Web text and rejects style/script escape channels", () => {
+    const source = createWebDocument({ documentId: "landing", html: '<h1 data-design-node-id="title">Original</h1>' });
+    const text = "$& $1 $` $' </style><script>never()</script>";
+    const edited = applyArtifactEdits(source, [{ type: "web.text", nodeId: "title", text }]).document;
+    expect(edited.html).toBe('<h1 data-design-node-id="title">$&amp; $1 $` $&#039; &lt;/style&gt;&lt;script&gt;never()&lt;/script&gt;</h1>');
+    expect(() => applyArtifactEdits(source, [{ type: "web.style", nodeIds: ["title"], declarations: { color: "</style><script>never()</script>" }, scope: "shared" }])).toThrow("markup");
+    expect(() => applyArtifactEdits(source, [{ type: "web.style", nodeIds: ["title"], declarations: { background: "url(https://tracker.invalid/pixel)" }, scope: "shared" }])).toThrow("external resources");
+    const preview = buildWebEditorPreview(createWebDocument({ documentId: "unsafe", html: '<html><head><script>fetch("https://tracker.invalid")</script></head><body onload="never()"><h1 data-design-node-id="title">Safe</h1></body></html>', stylesheets: [{ id: "unsafe-style", code: "h1{color:red}</style><script>never()</script>" }] }), "test-channel");
+    expect(preview).toContain("Content-Security-Policy");
+    expect(preview).toContain('nonce="test-channel"');
+    expect(preview).not.toContain("tracker.invalid");
+    expect(preview).not.toContain('onload="never()"');
+    expect(preview).not.toContain("</style><script>never()</script>");
+  });
+
+  it("clamps pointer geometry to the slide and bounds transaction history", () => {
+    const moved = applyArtifactEdits(slides(), [{ type: "slide.move", slideId: "slide-1", nodeIds: ["a"], dx: -500, dy: 900 }]).document;
+    expect(moved.slides[0].nodes[0].frame).toMatchObject({ x: 0, y: 510 });
+    const resized = applyArtifactEdits(slides(), [{ type: "slide.resize", slideId: "slide-1", nodeId: "c", frame: { width: 2_000, height: 2_000 }, minSize: 8 }]).document;
+    expect(resized.slides[0].nodes[2].frame).toMatchObject({ width: 560, height: 380 });
+    let session = createArtifactEditSession({ sessionId: "bounded", artifactId: "deck", document: slides() });
+    for (let index = 0; index < EDIT_LIMITS.maxHistoryEntries + 3; index += 1) session = applyEditTransaction(session, { id: `key-${index}`, expectedVersion: session.version, label: "Nudge", boundary: "keyboard", operations: [{ type: "slide.move", slideId: "slide-1", nodeIds: ["a"], dx: 1, dy: 0 }] });
+    expect(session.undoStack).toHaveLength(EDIT_LIMITS.maxHistoryEntries);
+    expect(() => applyArtifactEdits(slides(), Array.from({ length: EDIT_LIMITS.maxOperationsPerTransaction + 1 }, () => ({ type: "slide.move", slideId: "slide-1", nodeIds: ["a"], dx: 0, dy: 0 } as const)))).toThrow("limited");
+  });
 });
 
 let workspace = "";
@@ -132,6 +160,18 @@ describe("persisted edit transactions", () => {
     expect((await current.json()).project.version).toBe(project.version + 1);
   });
 
+  it("requires expectedVersion and serializes concurrent project mutations", async () => {
+    const store = await import("@/server/store");
+    const route = await import("@/app/api/project/route");
+    const project = await store.loadProject("atomic-project");
+    const missing = await route.PUT(new Request("http://studio.local/api/project?project=atomic-project", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ landing: { headline: "No version" } }) }));
+    expect(missing.status).toBe(400);
+    const requests = ["First", "Second"].map((headline) => route.PUT(new Request("http://studio.local/api/project?project=atomic-project", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ expectedVersion: project.version, landing: { headline } }) })));
+    const responses = await Promise.all(requests);
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect((await store.loadProject("atomic-project")).version).toBe(project.version + 1);
+  });
+
   it("recovers an autosave journal and commits source as a new immutable artifact version", async () => {
     const brandSystems = await import("@/server/brand-system");
     const artifacts = await import("@/server/artifacts");
@@ -154,6 +194,22 @@ describe("persisted edit transactions", () => {
     expect(version.metadata).toMatchObject({ parentVersionId: base.metadata.versionId, createdBy: "user" });
     expect(version.document.slides[0].nodes[0].frame.x).toBe(11);
     expect(await readFile(primary, "utf8")).toContain('"dirty": false');
+  });
+
+  it("prefers the newest valid recovery snapshot and refuses to overwrite an existing session", async () => {
+    const brandSystems = await import("@/server/brand-system");
+    const artifacts = await import("@/server/artifacts");
+    const transactions = await import("@/server/edit-transactions");
+    const draft = await brandSystems.createBrandSystemDraft("recovery-order-project");
+    await brandSystems.publishBrandSystem("recovery-order-project", draft.snapshot.id);
+    const base = await artifacts.createArtifactVersion("recovery-order-project", { artifactId: "deck", kind: "slides", brandSystemVersionId: draft.snapshot.id, document: slides() });
+    await transactions.startEditSession("recovery-order-project", { sessionId: "ordered-session", artifactId: "deck", baseArtifactVersionId: base.metadata.versionId });
+    const primary = path.join(workspace, "projects", "recovery-order-project", "artifacts", "edit-sessions", "ordered-session.json");
+    const oldPrimary = await readFile(primary, "utf8");
+    await transactions.applyStoredEditTransaction("recovery-order-project", "ordered-session", { id: "newer", expectedVersion: 0, label: "Newer", boundary: "keyboard", operations: [{ type: "slide.move", slideId: "slide-1", nodeIds: ["a"], dx: 4, dy: 0 }] });
+    await writeFile(primary, oldPrimary, "utf8");
+    expect((await transactions.loadEditSession("recovery-order-project", "ordered-session")).session.version).toBe(1);
+    await expect(transactions.startEditSession("recovery-order-project", { sessionId: "ordered-session", artifactId: "deck", baseArtifactVersionId: base.metadata.versionId })).rejects.toThrow("will not be overwritten");
   });
 
   it("persists constrained Web text and mobile overrides without replacing authored source", async () => {

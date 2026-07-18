@@ -68,14 +68,19 @@ test("edits slide scene nodes with keyboard, undo and autosaved source persisten
   await page.getByRole("button", { name: /Presentation/ }).click();
   await page.getByRole("button", { name: "Edit canvas" }).click();
 
-  const canvas = page.getByRole("application", { name: /Slide 1 canvas/ });
-  const title = page.locator('[data-node-id="slide-cover:title"]');
+  const canvas = page.getByRole("listbox", { name: /Slide 1 canvas/ });
+  const title = page.locator('.artifact-canvas-editor [data-node-id="slide-cover:title"]');
   await title.click();
   await canvas.focus();
   await page.keyboard.press("Shift+ArrowRight");
   await expect(page.locator(".artifact-edit-feedback")).toContainText("Nudged 1 element");
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(page.locator(".artifact-edit-feedback")).toContainText("Undid Nudged 1 element");
+
+  const styleBeforeCaretMove = await title.getAttribute("style");
+  await title.locator("span").focus();
+  await page.keyboard.press("ArrowRight");
+  expect(await title.getAttribute("style")).toBe(styleBeforeCaretMove);
 
   const save = page.waitForResponse((response) => response.url().includes("/api/project?project=e2e") && response.request().method() === "PUT");
   await title.locator("span").fill("A directly edited launch story");
@@ -86,7 +91,24 @@ test("edits slide scene nodes with keyboard, undo and autosaved source persisten
   await page.reload();
   await page.getByRole("button", { name: /Presentation/ }).click();
   await page.getByRole("button", { name: "Edit canvas" }).click();
-  await expect(page.locator('[data-node-id="slide-cover:title"]')).toContainText("A directly edited launch story");
+  await expect(page.locator('.artifact-canvas-editor [data-node-id="slide-cover:title"]')).toContainText("A directly edited launch story");
+});
+
+test("flushes a pending canvas edit when edit mode closes before the debounce", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/?project=e2e-fast-exit");
+  await page.getByRole("button", { name: /Presentation/ }).click();
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+  const title = page.locator('[data-node-id="slide-cover:title"] span');
+  const expectedTitle = `A fast exit that must still persist ${Date.now()}`;
+  await title.fill(expectedTitle);
+  const save = page.waitForResponse((response) => response.url().includes("/api/project?project=e2e-fast-exit") && response.request().method() === "PUT" && response.ok());
+  await page.getByRole("button", { name: "Done editing" }).click();
+  await save;
+  await page.reload();
+  await page.getByRole("button", { name: /Presentation/ }).click();
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+  await expect(page.locator('.artifact-canvas-editor [data-node-id="slide-cover:title"]')).toContainText(expectedTitle);
 });
 
 test("inline-edits a stable Web design id and preserves it after reload", async ({ page }) => {

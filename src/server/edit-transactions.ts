@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   applyEditTransaction,
@@ -33,6 +33,7 @@ export interface StoredEditSession<TDocument extends EditableArtifactDocument = 
 }
 
 const queues = new Map<string, Promise<void>>();
+const MAX_STORED_SESSION_BYTES = 20_000_000;
 
 async function serialize<T>(key: string, operation: () => Promise<T>) {
   const previous = queues.get(key) ?? Promise.resolve();
@@ -66,6 +67,14 @@ async function atomic(file: string, value: unknown) {
   await rename(temporary, file);
 }
 
+async function exists(file: string) {
+  try { await access(file); return true; }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 function validateStored(value: unknown): StoredEditSession {
   const stored = value as StoredEditSession;
   if (stored?.schemaVersion !== 1 || !stored.projectId?.trim() || !["web", "slides"].includes(stored.kind) || !stored.brandSystemVersionId?.trim() || !stored.branchId?.trim()) throw new Error("The persisted edit session is invalid.");
@@ -75,6 +84,9 @@ function validateStored(value: unknown): StoredEditSession {
 }
 
 async function save(stored: StoredEditSession) {
+  while (Buffer.byteLength(JSON.stringify(stored), "utf8") > MAX_STORED_SESSION_BYTES && stored.session.undoStack.length > 1) stored.session.undoStack.shift();
+  while (Buffer.byteLength(JSON.stringify(stored), "utf8") > MAX_STORED_SESSION_BYTES && stored.session.redoStack.length > 1) stored.session.redoStack.shift();
+  if (Buffer.byteLength(JSON.stringify(stored), "utf8") > MAX_STORED_SESSION_BYTES) throw new Error("The persisted edit session exceeds the 20 MB safety limit.");
   const location = await files(stored.projectId, stored.session.sessionId);
   // The recovery journal is deliberately written first. A crash during replacement
   // leaves the last complete snapshot available even if the primary is damaged.
@@ -105,13 +117,17 @@ async function reconcilePendingCommit(stored: StoredEditSession) {
 
 export async function loadEditSession(projectId: string, sessionId: string): Promise<StoredEditSession> {
   const location = await files(projectId, sessionId);
-  let stored: StoredEditSession;
-  try { stored = validateStored(await readJson(location.current)); }
-  catch (primaryError) {
-    try { stored = validateStored(await readJson(location.recovery)); }
-    catch { throw primaryError; }
-  }
+  const candidates: StoredEditSession[] = [];
+  let primaryError: unknown;
+  try { candidates.push(validateStored(await readJson(location.current))); }
+  catch (error) { primaryError = error; }
+  try { candidates.push(validateStored(await readJson(location.recovery))); }
+  catch { /* A valid primary remains sufficient. */ }
+  if (!candidates.length) throw primaryError ?? new Error("Edit session not found.");
+  const stored = candidates.sort((left, right) => right.session.version - left.session.version || String(right.session.lastAutosavedAt ?? "").localeCompare(String(left.session.lastAutosavedAt ?? "")))[0];
   if (stored.projectId !== projectId) throw new Error("Edit session belongs to another project.");
+  if (stored.session.sessionId !== sessionId) throw new Error("The persisted edit session id does not match its file.");
+  identifier(stored.session.artifactId, "Artifact id");
   return reconcilePendingCommit(stored);
 }
 
@@ -129,7 +145,11 @@ export async function startEditSession<TDocument extends EditableArtifactDocumen
   const sessionId = input.sessionId ?? `edit_${randomUUID()}`;
   const session = createArtifactEditSession({ sessionId, artifactId: input.artifactId, baseArtifactVersionId: base.metadata.versionId, document: input.document ?? base.document });
   const stored: StoredEditSession<TDocument> = { schemaVersion: 1, projectId, kind: base.metadata.kind, brandSystemVersionId: base.metadata.brandSystemVersionId, branchId: base.metadata.branchId, session };
-  return serialize(`${projectId}:${sessionId}`, () => save(stored) as Promise<StoredEditSession<TDocument>>);
+  return serialize(`${projectId}:${sessionId}`, async () => {
+    const location = await files(projectId, sessionId);
+    if (await exists(location.current) || await exists(location.recovery)) throw new Error(`Edit session ${sessionId} already exists and will not be overwritten.`);
+    return save(stored) as Promise<StoredEditSession<TDocument>>;
+  });
 }
 
 export async function applyStoredEditTransaction(projectId: string, sessionId: string, input: EditTransactionInput) {

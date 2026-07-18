@@ -25,6 +25,11 @@ export interface ArtifactCanvasEditorProps {
 }
 
 type Gesture = { kind: "move" | "resize"; nodeId: string; startX: number; startY: number; dx: number; dy: number };
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+function isTextEditingTarget(target: EventTarget | null) {
+  return target instanceof HTMLElement && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+}
 
 function nodeStyle(node: SlideNode, width: number, height: number, gesture?: Gesture): React.CSSProperties {
   const moving = gesture?.nodeId === node.id;
@@ -65,64 +70,127 @@ export function ArtifactCanvasEditor({ artifactId, document, slideId, sessionId 
   const [gesture, setGesture] = useState<Gesture>();
   const [feedback, setFeedback] = useState<EditFeedback[]>([]);
   const [announcement, setAnnouncement] = useState("Canvas ready");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [externalDocument, setExternalDocument] = useState<SlideDocument>();
   const canvasRef = useRef<HTMLDivElement>(null);
   const autosavedVersion = useRef(-1);
+  const sessionRef = useRef(session);
+  const emittedDocument = useRef<SlideDocument | undefined>(undefined);
+  const identity = useRef(`${artifactId}\u0000${sessionId}`);
+  const inFlightSave = useRef<Promise<void> | undefined>(undefined);
+  const persistRef = useRef<() => Promise<void>>(async () => undefined);
+  const retryTimer = useRef<number | undefined>(undefined);
+  const retryAttempts = useRef(0);
+  const mounted = useRef(true);
+  sessionRef.current = session;
   const slide = session.document.slides.find((candidate) => candidate.id === slideId);
 
   useEffect(() => {
-    setSession(createArtifactEditSession({ sessionId, artifactId, document }));
-    setSelectedIds([]);
-    autosavedVersion.current = -1;
-  }, [artifactId, sessionId]);
+    const nextIdentity = `${artifactId}\u0000${sessionId}`;
+    const current = sessionRef.current;
+    if (identity.current !== nextIdentity) {
+      const next = createArtifactEditSession({ sessionId, artifactId, document });
+      identity.current = nextIdentity; sessionRef.current = next; setSession(next); setSelectedIds([]); setExternalDocument(undefined); autosavedVersion.current = -1; setSaveStatus("idle");
+      return;
+    }
+    if (document === emittedDocument.current || document === current.document || JSON.stringify(document) === JSON.stringify(current.document)) return;
+    if (current.dirty && autosavedVersion.current < current.version) {
+      setExternalDocument(document);
+      setAnnouncement("A newer external document is available. Reload it before continuing to avoid overwriting changes.");
+      return;
+    }
+    const next = createArtifactEditSession({ sessionId, artifactId, document });
+    sessionRef.current = next; setSession(next); setSelectedIds([]); setExternalDocument(undefined); autosavedVersion.current = -1; setSaveStatus("idle");
+  }, [artifactId, document, sessionId]);
+
+  const persistLatest = useCallback(async () => {
+    if (externalDocument) return;
+    if (inFlightSave.current) {
+      try { await inFlightSave.current; } catch { /* The retry below uses the latest local snapshot. */ }
+    }
+    const target = sessionRef.current;
+    if (!target.dirty || autosavedVersion.current >= target.version) return;
+    if (mounted.current) setSaveStatus("saving");
+    const task = Promise.resolve().then(() => onAutosave?.(target.document, target)).then(() => undefined);
+    inFlightSave.current = task;
+    try {
+      await task;
+      retryAttempts.current = 0;
+      autosavedVersion.current = target.version;
+      if (sessionRef.current.version === target.version) {
+        const saved = markEditAutosaved(sessionRef.current, target.version);
+        sessionRef.current = saved; if (mounted.current) setSession(saved);
+      }
+      if (mounted.current) { setSaveStatus("saved"); setAnnouncement("Changes autosaved"); }
+    } catch (error) {
+      retryAttempts.current += 1;
+      if (mounted.current) {
+        setSaveStatus("error");
+        setAnnouncement(error instanceof Error ? `Autosave failed: ${error.message}. Retrying…` : "Autosave failed. Retrying…");
+      }
+      if (retryTimer.current) window.clearTimeout(retryTimer.current);
+      if (retryAttempts.current <= 5) retryTimer.current = window.setTimeout(() => { void persistRef.current().catch(() => undefined); }, Math.min(6_000, 1_000 * retryAttempts.current));
+      throw error;
+    } finally {
+      if (inFlightSave.current === task) inFlightSave.current = undefined;
+    }
+  }, [externalDocument, onAutosave]);
+
+  useEffect(() => { persistRef.current = persistLatest; }, [persistLatest]);
 
   useEffect(() => {
-    if (!session.dirty || autosavedVersion.current === session.version) return;
-    const timer = window.setTimeout(() => {
-      setSession((current) => {
-        if (autosavedVersion.current === current.version) return current;
-        const saved = markEditAutosaved(current, current.version);
-        autosavedVersion.current = saved.version;
-        void onAutosave?.(saved.document, saved);
-        setAnnouncement("Changes autosaved");
-        return saved;
-      });
-    }, 750);
+    if (!session.dirty || autosavedVersion.current >= session.version || externalDocument) return;
+    const timer = window.setTimeout(() => { void persistLatest().catch(() => undefined); }, 750);
     return () => window.clearTimeout(timer);
-  }, [onAutosave, session.dirty, session.version]);
+  }, [externalDocument, persistLatest, session.dirty, session.version]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      if (retryTimer.current) window.clearTimeout(retryTimer.current);
+      void persistRef.current().catch(() => undefined);
+    };
+  }, []);
 
   const commit = useCallback((label: string, boundary: Exclude<EditBoundary, "autosave">, operations: ArtifactEditOperation[]) => {
-    if (readOnly) return;
-    setSession((current) => {
+    if (readOnly || externalDocument) return;
+    try {
+      const current = sessionRef.current;
       const next = applyEditTransaction(current, { id: `tx-${current.version + 1}`, expectedVersion: current.version, label, boundary, operations });
+      sessionRef.current = next; emittedDocument.current = next.document; setSession(next);
       setFeedback(next.undoStack.at(-1)?.feedback ?? []);
       setAnnouncement(label);
       onChange?.(next.document, next);
-      return next;
-    });
-  }, [onChange, readOnly]);
+    } catch (error) { setAnnouncement(error instanceof Error ? error.message : "The edit could not be applied."); }
+  }, [externalDocument, onChange, readOnly]);
 
   const undo = useCallback(() => {
-    setSession((current) => {
-      if (!current.undoStack.length) return current;
+    if (externalDocument) return;
+    try {
+      const current = sessionRef.current;
+      if (!current.undoStack.length) return;
       const next = undoEditTransaction(current, current.version);
+      sessionRef.current = next; emittedDocument.current = next.document; setSession(next);
       setAnnouncement(`Undid ${current.undoStack.at(-1)?.label ?? "edit"}`);
       onChange?.(next.document, next);
-      return next;
-    });
-  }, [onChange]);
+    } catch (error) { setAnnouncement(error instanceof Error ? error.message : "Undo failed."); }
+  }, [externalDocument, onChange]);
 
   const redo = useCallback(() => {
-    setSession((current) => {
-      if (!current.redoStack.length) return current;
+    if (externalDocument) return;
+    try {
+      const current = sessionRef.current;
+      if (!current.redoStack.length) return;
       const next = redoEditTransaction(current, current.version);
+      sessionRef.current = next; emittedDocument.current = next.document; setSession(next);
       setAnnouncement(`Redid ${current.redoStack.at(-1)?.label ?? "edit"}`);
       onChange?.(next.document, next);
-      return next;
-    });
-  }, [onChange]);
+    } catch (error) { setAnnouncement(error instanceof Error ? error.message : "Redo failed."); }
+  }, [externalDocument, onChange]);
 
   function pointerStart(event: React.PointerEvent, nodeId: string, kind: Gesture["kind"]) {
-    if (readOnly) return;
+    if (readOnly || externalDocument) return;
     event.preventDefault();
     event.stopPropagation();
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -151,6 +219,7 @@ export function ArtifactCanvasEditor({ artifactId, document, slideId, sessionId 
   }
 
   function keyboard(event: React.KeyboardEvent) {
+    if (isTextEditingTarget(event.target)) return;
     const command = event.metaKey || event.ctrlKey;
     if (command && event.key.toLowerCase() === "z") { event.preventDefault(); if (event.shiftKey) redo(); else undo(); return; }
     if (command && event.key.toLowerCase() === "y") { event.preventDefault(); redo(); return; }
@@ -165,6 +234,7 @@ export function ArtifactCanvasEditor({ artifactId, document, slideId, sessionId 
 
   function editText(event: React.FocusEvent<HTMLElement>, node: Extract<SlideNode, { type: "text" }>) {
     const text = event.currentTarget.textContent ?? "";
+    if (externalDocument) { event.currentTarget.textContent = node.text; return; }
     if (text === node.text) return;
     const selection = window.getSelection();
     const anchor = selection && event.currentTarget.contains(selection.anchorNode) ? Math.min(text.length, selection.anchorOffset) : text.length;
@@ -176,11 +246,16 @@ export function ArtifactCanvasEditor({ artifactId, document, slideId, sessionId 
   const selectedNodes = useMemo(() => slide?.nodes.filter((node) => selectedIds.includes(node.id)) ?? [], [selectedIds, slide]);
   if (!slide) return <div role="alert">Slide {slideId} is unavailable.</div>;
   const align = (alignment: "left" | "horizontal-center" | "right" | "top" | "vertical-center" | "bottom") => commit(`Aligned ${alignment.replace("-", " ")}`, "control", [{ type: "slide.align", slideId, nodeIds: selectedIds, alignment }]);
+  const reloadExternal = () => {
+    if (!externalDocument) return;
+    const next = createArtifactEditSession({ sessionId, artifactId, document: externalDocument });
+    sessionRef.current = next; setSession(next); setExternalDocument(undefined); setSelectedIds([]); autosavedVersion.current = -1; setSaveStatus("idle"); setAnnouncement("Reloaded the external document");
+  };
 
   return <section className="artifact-canvas-editor" aria-label={`Editing ${slide.name}`} onKeyDown={keyboard}>
     <div className="artifact-edit-toolbar" role="toolbar" aria-label="Element controls">
-      <button type="button" onClick={undo} disabled={!session.undoStack.length} aria-label="Undo">↶</button>
-      <button type="button" onClick={redo} disabled={!session.redoStack.length} aria-label="Redo">↷</button>
+      <button type="button" onClick={undo} disabled={!session.undoStack.length || Boolean(externalDocument)} aria-label="Undo">↶</button>
+      <button type="button" onClick={redo} disabled={!session.redoStack.length || Boolean(externalDocument)} aria-label="Redo">↷</button>
       <span aria-hidden="true"/>
       <button type="button" onClick={() => align("left")} disabled={selectedIds.length < 2}>Align left</button>
       <button type="button" onClick={() => align("horizontal-center")} disabled={selectedIds.length < 2}>Centre</button>
@@ -191,17 +266,18 @@ export function ArtifactCanvasEditor({ artifactId, document, slideId, sessionId 
         <label>Size <input aria-label="Font size" type="number" min="8" max="256" value={selectedNodes[0].style?.fontSize ?? 24} onChange={(event) => commit("Changed type size", "control", [{ type: "slide.control", slideId, nodeIds: selectedIds, control: "typography.size", value: Number(event.target.value), scope: "selection" }])}/></label>
         <label>Text <input aria-label="Text colour" type="color" value={selectedNodes[0].style?.color ?? "#17161b"} onChange={(event) => commit("Changed text colour", "control", [{ type: "slide.control", slideId, nodeIds: selectedIds, control: "color.foreground", value: event.target.value, scope: "selection" }])}/></label>
       </>}
-      <em>{session.lastAutosavedAt ? "Autosaved" : session.dirty ? "Unsaved" : "Saved"} · scope: slide</em>
+      <em>{saveStatus === "saving" ? "Saving…" : saveStatus === "error" ? "Save failed · retrying" : autosavedVersion.current >= session.version ? "Autosaved" : session.dirty ? "Unsaved" : "Saved"} · scope: slide</em>
     </div>
+    {externalDocument && <div role="alert" className="artifact-edit-conflict"><span>A newer external version arrived while this canvas had local edits.</span><button type="button" onClick={reloadExternal}>Reload external version</button></div>}
     <div className="artifact-slide-stage">
-      <div ref={canvasRef} className="artifact-slide-canvas" tabIndex={0} role="application" aria-label={`${slide.name} canvas. Use arrow keys to move selected elements; Shift moves by ten points.`} style={{ aspectRatio: `${session.document.dimensions.width}/${session.document.dimensions.height}` }} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={() => setGesture(undefined)} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelectedIds([]); }}>
+      <div ref={canvasRef} className="artifact-slide-canvas" tabIndex={0} role="listbox" aria-multiselectable="true" aria-label={`${slide.name} canvas. Use arrow keys to move selected elements; Shift moves by ten points.`} style={{ aspectRatio: `${session.document.dimensions.width}/${session.document.dimensions.height}` }} onPointerMove={pointerMove} onPointerUp={pointerEnd} onPointerCancel={() => setGesture(undefined)} onPointerDown={(event) => { if (event.target === event.currentTarget) setSelectedIds([]); }}>
         {[...slide.nodes].sort((a, b) => a.zIndex - b.zIndex).map((node) => {
           const selected = selectedIds.includes(node.id);
-          return <div key={node.id} className={`artifact-node artifact-node-${node.type}${selected ? " selected" : ""}`} data-node-id={node.id} data-selected={selected || undefined} style={nodeStyle(node, session.document.dimensions.width, session.document.dimensions.height, gesture)} role={node.type === "text" ? "textbox" : "button"} aria-label={node.name ?? `${node.type} ${node.id}`} aria-selected={selected} onPointerDown={(event) => pointerStart(event, node.id, "move")}>
-            {node.type === "text" && <span contentEditable={!readOnly} suppressContentEditableWarning onPointerDown={(event) => { if (event.detail > 1) event.stopPropagation(); }} onBlur={(event) => editText(event, node)}>{node.text}</span>}
+          return <div key={node.id} className={`artifact-node artifact-node-${node.type}${selected ? " selected" : ""}`} data-node-id={node.id} data-selected={selected || undefined} style={nodeStyle(node, session.document.dimensions.width, session.document.dimensions.height, gesture)} role="option" tabIndex={0} aria-label={node.name ?? `${node.type} ${node.id}`} aria-selected={selected} onFocus={() => { if (!selected) setSelectedIds([node.id]); }} onKeyDown={(event) => { if (!isTextEditingTarget(event.target) && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setSelectedIds((current) => event.shiftKey ? current.includes(node.id) ? current.filter((id) => id !== node.id) : [...current, node.id] : [node.id]); } }} onPointerDown={(event) => pointerStart(event, node.id, "move")}>
+            {node.type === "text" && <span role="textbox" aria-multiline="true" tabIndex={0} contentEditable={!readOnly && !externalDocument} suppressContentEditableWarning onPointerDown={(event) => { if (event.detail > 1) event.stopPropagation(); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.currentTarget.blur(); } }} onBlur={(event) => editText(event, node)}>{node.text}</span>}
             {node.type === "media" && (node.mediaType === "image" ? <img src={node.source.uri} alt={node.altText}/> : <span>{node.mediaType}</span>)}
             {node.type === "group" && <span className="artifact-group-label">{node.name ?? "Group"}</span>}
-            {selected && !readOnly && <button type="button" className="artifact-resize-handle" aria-label={`Resize ${node.name ?? node.id}`} onPointerDown={(event) => pointerStart(event, node.id, "resize")}/>} 
+            {selected && !readOnly && !externalDocument && <button type="button" className="artifact-resize-handle" aria-label={`Resize ${node.name ?? node.id}`} onPointerDown={(event) => pointerStart(event, node.id, "resize")}/>}
           </div>;
         })}
       </div>

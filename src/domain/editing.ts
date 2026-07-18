@@ -12,6 +12,13 @@ export type EditableArtifactDocument = SlideDocument | WebDocument;
 export type ResponsiveScope = "shared" | "desktop" | "mobile";
 export type EditBoundary = "gesture" | "keyboard" | "inline-edit" | "control" | "autosave";
 
+export const EDIT_LIMITS = {
+  maxOperationsPerTransaction: 64,
+  maxTransactionBytes: 256_000,
+  maxHistoryEntries: 100,
+  maxWebStyleBytes: 100_000
+} as const;
+
 export interface TextSelectionContext {
   anchor: number;
   focus: number;
@@ -178,7 +185,8 @@ const WEB_STYLE_PROPERTIES = new Set([
 
 function cssValue(value: string | number) {
   const rendered = typeof value === "number" ? String(value) : value.trim();
-  if (!rendered || rendered.length > 160 || /[{};@]|\/\*/.test(rendered)) throw new Error("Web style values may not contain rules, at-rules, or comments.");
+  if (!rendered || rendered.length > 160 || /[\u0000-\u001f{};@<>"'`\\]|\/\*/.test(rendered)) throw new Error("Web style values may not contain markup, rules, at-rules, comments, quotes, or escapes.");
+  if (/\b(?:url|image-set|cross-fade|element|expression)\s*\(/i.test(rendered) || /javascript\s*:/i.test(rendered)) throw new Error("Web style values may not load external resources or execute expressions.");
   return rendered;
 }
 
@@ -197,7 +205,8 @@ function patchWebText(document: WebDocument, nodeId: string, text: string) {
   const escapedId = nodeId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(`(<([a-z][\\w:-]*)\\b[^>]*\\bdata-design-node-id\\s*=\\s*(?:"${escapedId}"|'${escapedId}'|${escapedId})[^>]*>)([^<]*)(<\\/\\2\\s*>)`, "i");
   if (!pattern.test(document.html)) throw new Error(`Web node ${nodeId} must be a text-only stable design node for inline editing.`);
-  document.html = document.html.replace(pattern, `$1${escapeHtml(text)}$4`);
+  const escapedText = escapeHtml(text);
+  document.html = document.html.replace(pattern, (_match, opening: string, _tag: string, _prior: string, closing: string) => `${opening}${escapedText}${closing}`);
 }
 
 function patchWebStyles(document: WebDocument, nodeIds: string[], declarations: Record<string, string | number>, scope: ResponsiveScope) {
@@ -216,11 +225,30 @@ function patchWebStyles(document: WebDocument, nodeIds: string[], declarations: 
     stylesheet = { id: "studio-direct-edits", code: "" };
     document.stylesheets.push(stylesheet);
   }
-  stylesheet.code = `${stylesheet.code}${stylesheet.code ? "\n" : ""}${scoped}`;
+  const nextCode = `${stylesheet.code}${stylesheet.code ? "\n" : ""}${scoped}`;
+  if (new TextEncoder().encode(nextCode).byteLength > EDIT_LIMITS.maxWebStyleBytes) throw new Error("Direct Web styles exceed the 100 KB safety limit.");
+  stylesheet.code = nextCode;
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  if (minimum > maximum) return minimum;
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function boundedMovement(document: SlideDocument, nodes: SlideNode[], dx: number, dy: number) {
+  const area = bounds(nodes);
+  const maxDx = document.dimensions.width - (area.x + area.width);
+  const maxDy = document.dimensions.height - (area.y + area.height);
+  return {
+    dx: area.width > document.dimensions.width ? 0 : clamp(dx, -area.x, maxDx),
+    dy: area.height > document.dimensions.height ? 0 : clamp(dy, -area.y, maxDy)
+  };
 }
 
 export function applyArtifactEdits<TDocument extends EditableArtifactDocument>(source: TDocument, operations: ArtifactEditOperation[]): EditResult<TDocument> {
   if (!operations.length) throw new Error("An edit transaction requires at least one operation.");
+  if (operations.length > EDIT_LIMITS.maxOperationsPerTransaction) throw new Error(`An edit transaction is limited to ${EDIT_LIMITS.maxOperationsPerTransaction} operations.`);
+  if (new TextEncoder().encode(JSON.stringify(operations)).byteLength > EDIT_LIMITS.maxTransactionBytes) throw new Error("An edit transaction exceeds the 256 KB safety limit.");
   const document = structuredClone(source);
   const feedback: EditFeedback[] = [];
   for (const operation of operations) {
@@ -229,13 +257,18 @@ export function applyArtifactEdits<TDocument extends EditableArtifactDocument>(s
       if (operation.type === "slide.move") {
         finite(operation.dx, "Horizontal movement"); finite(operation.dy, "Vertical movement");
         const { nodes } = slideAndNodes(document, operation.slideId, operation.nodeIds);
-        for (const node of nodes) { node.frame.x += operation.dx; node.frame.y += operation.dy; }
+        const movement = boundedMovement(document, nodes, operation.dx, operation.dy);
+        for (const node of nodes) { node.frame.x += movement.dx; node.frame.y += movement.dy; }
       } else if (operation.type === "slide.resize") {
         const { nodes: [node] } = slideAndNodes(document, operation.slideId, [operation.nodeId]);
         const next = { ...node.frame, ...operation.frame };
         Object.values(next).forEach((value) => finite(value, "Resize value"));
         const minimum = operation.minSize ?? 1;
         if (next.width < minimum || next.height < minimum) throw new Error(`Resized nodes must be at least ${minimum}pt.`);
+        next.x = clamp(next.x, 0, Math.max(0, document.dimensions.width - minimum));
+        next.y = clamp(next.y, 0, Math.max(0, document.dimensions.height - minimum));
+        next.width = Math.min(next.width, document.dimensions.width - next.x);
+        next.height = Math.min(next.height, document.dimensions.height - next.y);
         node.frame = next;
       } else if (operation.type === "slide.align") {
         const { nodes } = slideAndNodes(document, operation.slideId, operation.nodeIds, 2);
@@ -391,6 +424,7 @@ export function applyEditTransaction<TDocument extends EditableArtifactDocument>
   const entry: EditHistoryEntry<TDocument> = { id: input.id, label: input.label, boundary: input.boundary, at: input.at ?? new Date().toISOString(), before: session.document, after: result.document, operations: structuredClone(input.operations), feedback: result.feedback };
   session.document = result.document;
   session.undoStack.push(entry);
+  if (session.undoStack.length > EDIT_LIMITS.maxHistoryEntries) session.undoStack.splice(0, session.undoStack.length - EDIT_LIMITS.maxHistoryEntries);
   session.redoStack = [];
   session.version += 1;
   session.dirty = true;
