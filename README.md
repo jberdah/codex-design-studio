@@ -1,5 +1,8 @@
 # Codex Design Studio
 
+[![CI](https://github.com/jberdah/codex-design-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/jberdah/codex-design-studio/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Codex Design Studio is a local-first desktop application for creating a brand project, directing a real Web composition with Codex, checking every edit visually, and exporting production artifacts.
 
 The application now includes:
