@@ -38,6 +38,16 @@ async function recentWorkspaces(application: ElectronApplication) {
   });
 }
 
+async function runtimeInfo(application: ElectronApplication) {
+  const window = await application.firstWindow({ timeout: 120_000 });
+  return window.evaluate(() => {
+    const bridge = window as unknown as {
+      codexStudio: { runtimeInfo(): Promise<{ platform: string; arch: string; packaged: boolean }> };
+    };
+    return bridge.codexStudio.runtimeInfo();
+  });
+}
+
 test("portable workspace survives Electron/package relaunch and can be revoked", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "studio-electron-workspace-"));
   const userData = path.join(root, "user-data");
@@ -68,6 +78,11 @@ test("portable workspace survives Electron/package relaunch and can be revoked",
   let application: ElectronApplication | undefined;
   try {
     application = await launch(userData);
+    expect(await runtimeInfo(application)).toEqual({
+      platform: process.platform,
+      arch: process.arch,
+      packaged: Boolean(process.env.CODEX_STUDIO_PACKAGED_APP)
+    });
     expect(await recentWorkspaces(application)).toEqual([expect.objectContaining({ id: registryId, displayName: "Portfolio", available: true })]);
     await writeFile(path.join(workspace, "user-note.txt"), "keep me\n");
     await application.close();

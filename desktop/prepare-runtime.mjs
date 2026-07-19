@@ -57,8 +57,15 @@ for (const dependency of ["@openai", "playwright", "playwright-core", "pixelmatc
 }
 
 const localBrowsers = path.join(runtimeOutput, "node_modules", "playwright-core", ".local-browsers");
-await access(path.join(localBrowsers, "chromium_headless_shell-1193"));
-await rm(path.join(localBrowsers, "chromium-1193"), { recursive: true, force: true });
-await rm(path.join(localBrowsers, "ffmpeg-1011"), { recursive: true, force: true });
+const browserEntries = await readdir(localBrowsers);
+const headlessShells = browserEntries.filter((entry) => entry.startsWith("chromium_headless_shell-"));
+if (headlessShells.length !== 1) {
+  throw new Error(`Expected one local Chromium headless shell, found: ${headlessShells.join(", ") || "none"}`);
+}
+for (const entry of browserEntries) {
+  if (entry.startsWith("chromium-") || entry.startsWith("ffmpeg-")) {
+    await rm(path.join(localBrowsers, entry), { recursive: true, force: true });
+  }
+}
 
-console.log(`Prepared desktop runtime at ${output}`);
+console.log(`Prepared desktop runtime at ${output} with ${headlessShells[0]} for ${process.platform}-${process.arch}`);

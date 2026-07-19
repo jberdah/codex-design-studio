@@ -5,6 +5,11 @@ const http = require("node:http");
 const { WorkspaceRegistry } = require("./workspace-registry.cjs");
 const { registerWorkspaceIpc } = require("./workspace-ipc.cjs");
 
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.squirrel.CodexDesignStudio.CodexDesignStudio");
+  if (require("electron-squirrel-startup")) app.quit();
+}
+
 const HOST = "127.0.0.1";
 const PORT = 32145;
 let serverProcess;
@@ -140,6 +145,7 @@ async function activateWorkspace(grant) {
 }
 
 function installWorkspaceIpc() {
+  ipcMain.handle("studio:runtime-info", () => ({ platform: process.platform, arch: process.arch, packaged: app.isPackaged }));
   registerWorkspaceIpc(ipcMain, {
     choose: (options) => chooseWorkspace(options),
     listRecent: () => registry.listRecent(),
