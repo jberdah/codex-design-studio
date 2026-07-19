@@ -1,4 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+
+// The workspace folder must exist before the web server boots; creating it here
+// keeps the webServer command free of shell-specific syntax (works on cmd.exe and sh).
+const e2eWorkspace = path.resolve(".e2e-workspace");
+mkdirSync(e2eWorkspace, { recursive: true });
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -12,10 +19,16 @@ export default defineConfig({
     screenshot: "only-on-failure"
   },
   webServer: {
-    command: "NEXT_PUBLIC_CODEX_STUDIO_MODE=fallback npm run build && mkdir -p .e2e-workspace && CODEX_STUDIO_DATA_DIR=$PWD/.e2e-workspace HOSTNAME=127.0.0.1 PORT=3100 npm run start",
+    command: "npm run build && npm run start",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: true,
-    timeout: 120_000
+    timeout: 300_000,
+    env: {
+      NEXT_PUBLIC_CODEX_STUDIO_MODE: "fallback",
+      CODEX_STUDIO_DATA_DIR: e2eWorkspace,
+      HOSTNAME: "127.0.0.1",
+      PORT: "3100"
+    }
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }]
 });
