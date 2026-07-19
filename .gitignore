@@ -11,6 +11,7 @@ coverage/
 *.tsbuildinfo
 .local-reference-assets/
 .local-project-materials/
+media/video/*.webm
 .brainclaw/
 projects/*/history/
 projects/*/exports/

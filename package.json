@@ -22,6 +22,7 @@
     "test:runtime:packaged": "node scripts/verify-packaged-runtime.mjs",
     "test:agent": "node scripts/test-agent.mjs",
     "media:devpost": "node scripts/generate-devpost-media.mjs",
+    "media:demo-video": "node scripts/record-demo-video.mjs",
     "preflight": "node scripts/preflight.mjs",
     "desktop:dev": "electron .",
     "desktop:icon": "node desktop/build-icons.mjs",
