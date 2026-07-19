@@ -144,7 +144,7 @@ beforeEach(async () => {
 afterEach(async () => {
   if (previousDataDirectory === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = previousDataDirectory;
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
 });
 
 describe("persisted edit transactions", () => {

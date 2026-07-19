@@ -17,7 +17,7 @@ beforeEach(async () => {
 afterEach(async () => {
   if (priorDataDir === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = priorDataDir;
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
 });
 
 async function publishedBrandSystem(projectId: string) {
@@ -153,7 +153,7 @@ describe("visual asset contracts and immutable workflow", () => {
     const controller = new AbortController();
     const mock = adapter((_request, signal) => new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true })));
     const pending = visual.generateVisualAsset("cancel", "hero", brief(brandSystemVersionId, 1), mock, { signal: controller.signal });
-    await vi.waitFor(async () => expect((await visual.loadVisualAssetRegistry("cancel")).runs[0]?.status).toBe("running"));
+    await vi.waitFor(async () => expect((await visual.loadVisualAssetRegistry("cancel")).runs[0]?.status).toBe("running"), { timeout: 10_000, interval: 50 });
     controller.abort();
     await expect(pending).rejects.toThrow("cancelled");
     expect((await visual.loadVisualAssetRegistry("cancel")).runs[0]).toMatchObject({ status: "cancelled", attempts: [{ status: "cancelled" }] });

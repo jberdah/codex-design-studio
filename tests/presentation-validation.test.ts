@@ -15,7 +15,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(outputDir, { recursive: true, force: true });
+  await rm(outputDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
 });
 
 describe("actual PowerPoint export validation", () => {
