@@ -288,3 +288,24 @@ test("inline-edits a stable Web design id and preserves it after reload", async 
   await page.reload();
   await expect(page.frameLocator('iframe[title="Generated landing page"]').locator('[data-design-id="hero-title"]')).toHaveText("A Web headline edited in place");
 });
+
+test("edits the Web canvas directly and persists the transactional save", async ({ page }) => {
+  await page.goto("/?project=e2e");
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+
+  const canvas = page.frameLocator('iframe[title="Editable Web artifact"]');
+  const title = canvas.locator('[data-design-node-id="hero-title"]');
+  await title.click();
+  await expect(page.locator(".artifact-edit-toolbar strong")).toContainText("Hero title");
+  await expect(page.locator(".context-card")).toContainText("Hero title");
+
+  const save = page.waitForResponse((response) => response.url().includes("/api/web-source?project=e2e") && response.ok());
+  await title.dblclick();
+  await title.fill("A canvas headline saved through the transaction");
+  await title.press("Escape");
+  await save;
+  await expect(page.locator(".artifact-edit-toolbar em")).toContainText("Autosaved");
+
+  await page.reload();
+  await expect(page.frameLocator('iframe[title="Generated landing page"]').locator('[data-design-id="hero-title"]')).toHaveText("A canvas headline saved through the transaction");
+});

@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectData, ProjectSummary, ReviewReport, SelectionContext } from "@/domain/types";
-import type { SlideDocument } from "@/domain/artifacts";
+import type { SlideDocument, WebDocument } from "@/domain/artifacts";
+import { createWebDocument, ensureWebNodeAnchors, extractDirectEditStyles, serializeWebDocumentHtml } from "@/domain/artifacts";
 import type { BootstrapSession, StrategicCreativeBriefVersion as BootstrapBriefVersion } from "@/domain/bootstrap";
 import { projectSlideDocument, projectWithSlideDocument } from "@/domain/slide-editing";
 import type { EvidenceDirective, EvidenceKind, ProvenanceGraph, SourceIntent, SourceKind } from "@/domain/sources";
@@ -10,6 +11,7 @@ import type { ArtifactKind, BrandSystemRegistry, ReconciliationAction, Reconcili
 import { SlidePreview } from "./SlidePreview";
 import { VisualAssetStudio } from "./VisualAssetStudio";
 import { ArtifactCanvasEditor } from "./ArtifactCanvasEditor";
+import { WebArtifactEditor } from "./WebArtifactEditor";
 
 type Surface = "sources" | "reconcile" | "brand" | "system" | "assets" | "web" | "slides";
 type ApiProject = { project: ProjectData; landingHtml: string };
@@ -137,10 +139,12 @@ export function Studio() {
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideDocument, setSlideDocument] = useState<SlideDocument>();
   const [slideEditing, setSlideEditing] = useState(false);
+  const [webEditing, setWebEditing] = useState(false);
   const projectVersion = useRef(0);
   const projectSaveQueue = useRef<Promise<void>>(Promise.resolve());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const accountPollToken = useRef(0);
+  const toastTimer = useRef<number>(undefined);
   const [agent, setAgent] = useState<{ available: boolean; model: string; cliVersion: string }>();
   const [provenance, setProvenance] = useState<ProvenanceGraph>();
   const [reconciliation, setReconciliation] = useState<ReconciliationReview>();
@@ -213,6 +217,13 @@ export function Studio() {
   useEffect(() => { if (data?.project) projectVersion.current = data.project.version; }, [data?.project.version]);
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages, busy]);
+
+  useEffect(() => {
+    if (!toast) return;
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(undefined), 6_000);
+    return () => window.clearTimeout(toastTimer.current);
+  }, [toast]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -365,7 +376,7 @@ export function Studio() {
       const restored = await response.json().catch(() => ({})) as ApiProject & { error?: string };
       if (!response.ok || !restored.project) throw new Error(restored.error ?? "Could not restore the project.");
       setData(restored); setSlideDocument(projectSlideDocument(restored.project)); projectVersion.current = restored.project.version;
-      setSelection(undefined); setReview(undefined); setSlideEditing(false); setActiveSlide(0);
+      setSelection(undefined); setReview(undefined); setSlideEditing(false); setWebEditing(false); setActiveSlide(0);
       setMessages([{ role: "assistant", text: "Project restored. Its initial brand system and deliverables are ready." }]);
       setToast("Project restored.");
     } catch (error) {
@@ -377,7 +388,7 @@ export function Studio() {
     const previousId = projectId;
     setProjectId(id);
     window.history.replaceState({}, "", `/?project=${encodeURIComponent(id)}`);
-    setData(null); setSelection(undefined); setReview(undefined); setSlideEditing(false); setActiveSlide(0);
+    setData(null); setSelection(undefined); setReview(undefined); setSlideEditing(false); setWebEditing(false); setActiveSlide(0);
     try {
       await Promise.all([load(id), loadSources(id), loadBrandSystems(id)]);
     } catch (error) {
@@ -410,6 +421,23 @@ export function Studio() {
       setToast(message);
       throw new Error(message);
     }
+  }
+
+  async function saveWebCanvas(document: WebDocument) {
+    if (!data) throw new Error("The project is no longer available.");
+    const html = serializeWebDocumentHtml(document);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(data.landingHtml));
+    const expectedSourceHash = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    await enqueueProjectSave(async () => {
+      const response = await fetch(apiForProject("/api/web-source"), {
+        method: "POST", headers: { "content-type": "application/json" }, keepalive: true,
+        body: JSON.stringify({ html, expectedProjectVersion: projectVersion.current, expectedSourceHash, summary: "Applied a direct canvas edit to the Web composition." })
+      });
+      const result = await response.json().catch(() => ({})) as ApiProject & { error?: string };
+      if (!response.ok || !result.project) throw new Error(result.error ?? "Could not save the Web edit.");
+      projectVersion.current = result.project.version;
+      setData({ project: result.project, landingHtml: result.landingHtml });
+    });
   }
 
   async function addUrlSource() {
@@ -712,6 +740,15 @@ export function Studio() {
   }
 
   const surfaceTitle = useMemo(() => nav.find((item) => item.id === surface)?.label ?? "Studio", [surface]);
+  const webDocument = useMemo(() => {
+    if (!webEditing || !data) return undefined;
+    try {
+      const { html, code } = extractDirectEditStyles(ensureWebNodeAnchors(data.landingHtml));
+      return createWebDocument({ documentId: "web-canvas", html, stylesheets: code ? [{ id: "studio-direct-edits", code }] : [] });
+    } catch {
+      return undefined;
+    }
+  }, [webEditing, data]);
   const focusedBootstrapQuestions = bootstrapSession?.questions.slice(0, 3) ?? [];
   const referenceReady = isPublicReferenceUrl(bootstrapInput.referenceUrl);
   if (!project || !data) return <main className="loading-screen"><div className="loader-mark">✦</div><p>Opening the studio…</p></main>;
@@ -793,7 +830,9 @@ export function Studio() {
             </article>) : <div className="source-empty">No extracted candidates yet. Process sources or add manual evidence first.</div>}</div>
           </div>}
           {surface === "assets" && <VisualAssetStudio projectId={projectId} project={project} brandSystems={systemRegistry} onBusy={setBusy} onToast={setToast}/>}
-          {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={pendingWebCandidate && candidatePreview === "candidate" ? pendingWebCandidate.html : data.landingHtml} sandbox="allow-scripts"/></div>}
+          {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span>{!pendingWebCandidate && <button className="canvas-edit-toggle web-edit-toggle" onClick={() => setWebEditing((current) => !current)}>{webEditing ? "Done editing" : "Edit canvas"}</button>}<em>↗</em></div>{webEditing && webDocument && !pendingWebCandidate
+            ? <WebArtifactEditor artifactId="web" document={webDocument} onAutosave={saveWebCanvas} onSelectNode={({ nodeId, label, text }) => setSelection({ deliverableId: "web", designId: nodeId, label, domPath: `[data-design-node-id="${nodeId}"]`, text: text.slice(0, 400), viewport: mobile ? "mobile" : "desktop" })}/>
+            : <iframe ref={previewRef} title="Generated landing page" srcDoc={pendingWebCandidate && candidatePreview === "candidate" ? pendingWebCandidate.html : data.landingHtml} sandbox="allow-scripts"/>}</div>}
           {surface === "slides" && (activeSlideData ? <div className="slides-canvas"><div className="slides-stage"><button className="canvas-edit-toggle" onClick={() => setSlideEditing((current) => !current)}>{slideEditing ? "Done editing" : "Edit canvas"}</button>{slideEditing && slideDocument ? <ArtifactCanvasEditor artifactId="slides" document={slideDocument} slideId={activeSlideData.id} onChange={(next) => setSlideDocument(next)} onAutosave={saveSlideCanvas}/> : <SlidePreview slide={activeSlideData} tokens={project.tokens} brandName={project.brand.name} index={safeSlideIndex} active onClick={() => undefined} document={slideDocument}/>}</div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={safeSlideIndex === index} onClick={() => setActiveSlide(index)} document={slideDocument}/></div>)}</div></div> : <div className="source-empty">This project has no slides yet. Create them from the chat or switch deliverable.</div>)}
           {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Review before release.</h1><p>The profile guides every creative decision and is published only through a versioned draft.</p></div><button className="primary-button" onClick={saveSystem}>Save draft</button></div><div className="form-grid">
             <label>Brand name<input value={project.brand.name} onChange={(e) => updateProject((p) => { p.brand.name = e.target.value; return p; })}/></label>
@@ -825,7 +864,7 @@ export function Studio() {
       </aside>
     </div>
     {review && <div className="review-drawer"><div className="review-score"><span>{review.score}</span><div><small>BRAND HEALTH</small><strong>{review.score >= 90 ? "Ready to ship" : "Needs attention"}</strong></div><button onClick={() => setReview(undefined)}>×</button></div>{review.checks.map((check) => <div className={`review-item ${check.status}`} key={check.id}><b>{check.status === "pass" ? "✓" : check.status === "warning" ? "!" : "×"}</b><div><strong>{check.label}</strong><span>{check.message}</span></div></div>)}</div>}
-    {toast && <button className="toast" onClick={() => setToast(undefined)}>{toast}<span>×</span></button>}
+    {toast && <button className="toast" onClick={() => setToast(undefined)} onMouseEnter={() => window.clearTimeout(toastTimer.current)} onMouseLeave={() => { window.clearTimeout(toastTimer.current); toastTimer.current = window.setTimeout(() => setToast(undefined), 3_000); }}>{toast}<span>×</span></button>}
     {pendingWebCandidate && <div className="modal-backdrop candidate-backdrop"><section className="project-modal candidate-modal" role="dialog" aria-modal="false" aria-labelledby="candidate-title"><div className="modal-heading"><div><small>WEB CANDIDATE · QA REVIEW</small><h2 id="candidate-title">Codex created a proposal</h2><p>{pendingWebCandidate.candidate.summary} The proposal is preserved even if you keep the original.</p></div></div><div className="candidate-preview-toggle"><button className={candidatePreview === "original" ? "active" : ""} onClick={() => setCandidatePreview("original")}>View original</button><button className={candidatePreview === "candidate" ? "active" : ""} onClick={() => setCandidatePreview("candidate")}>View candidate</button></div><div className="candidate-checks">{Object.entries(pendingWebCandidate.candidate.assessment.comparisons).map(([viewport, comparison]) => <div key={viewport}><strong>{viewport}</strong><span>Contrast failures {comparison.before.failures} → {comparison.after.failures}</span><em className={comparison.regressions.length || comparison.warnings?.length ? "warning" : "improved"}>{comparison.regressions.length ? `${comparison.regressions.join(", ")} needs review` : comparison.warnings?.length ? `${comparison.warnings.join(", ")} needs review` : "No new deterministic regression"}</em></div>)}</div><p className="candidate-note">Quality and accessibility warnings are overridable. Integrity and security failures are never offered for acceptance.</p><div className="modal-actions"><button className="ghost-button" onClick={() => resolveWebCandidate("reject")} disabled={Boolean(busy)}>Keep original</button><button className="primary-button" onClick={() => resolveWebCandidate("accept")} disabled={Boolean(busy)}>Accept with warnings</button></div></section></div>}
     {showNewProject && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setShowNewProject(false); }}>
       <section className="project-modal bootstrap-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-title">
