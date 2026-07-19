@@ -51,6 +51,8 @@ jobs:
       # Keep one native browser installation discoverable by source tests,
       # the desktop runtime packager, and packaged-runtime verification.
       PLAYWRIGHT_BROWSERS_PATH: "0"
+      # Signing is optional: forks and credential-less runs build unsigned.
+      HAS_MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE_BASE64 != '' }}
 
     steps:
       - name: Check out repository
@@ -65,13 +67,50 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve Playwright version
+        id: playwright-version
+        shell: bash
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      # PLAYWRIGHT_BROWSERS_PATH=0 keeps browsers inside playwright-core, which
+      # npm ci recreates — restore the cached download after the install step.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: node_modules/playwright-core/.local-browsers
+          key: playwright-local-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install native Chromium runtime
         run: npx playwright install chromium
 
       - name: Verify source contracts
         run: npm run typecheck && npm test
 
+      # Signing activates only when the repository provides credentials; forks
+      # and credential-less runs still produce working unsigned builds with the
+      # documented Gatekeeper/SmartScreen bypass as fallback.
+      - name: Import macOS signing certificate
+        if: matrix.platform == 'darwin' && env.HAS_MACOS_CERTIFICATE == 'true'
+        env:
+          MACOS_CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          echo "$MACOS_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+          security import certificate.p12 -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
       - name: Build native desktop media
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WINDOWS_SIGN_PARAMS: ${{ secrets.WINDOWS_SIGN_PARAMS }}
         run: npm run desktop:make -- --arch=${{ matrix.arch }}
 
       - name: Verify packaged Codex and Chromium
@@ -99,7 +138,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download native media
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@v7
         with:
           pattern: codex-design-studio-*
           path: release-assets

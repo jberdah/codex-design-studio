@@ -2,6 +2,15 @@ const path = require("node:path");
 
 const packagedRuntimeModules = ["electron-squirrel-startup", "debug", "ms"];
 
+// Signing and notarization activate only when the release environment carries
+// the required credentials; unsigned local and CI builds keep working and the
+// documented Gatekeeper/SmartScreen bypass remains the fallback.
+const macSigningIdentity = process.env.APPLE_SIGNING_IDENTITY;
+const macNotarization = process.env.APPLE_ID && process.env.APPLE_ID_PASSWORD && process.env.APPLE_TEAM_ID
+  ? { appleId: process.env.APPLE_ID, appleIdPassword: process.env.APPLE_ID_PASSWORD, teamId: process.env.APPLE_TEAM_ID }
+  : undefined;
+const windowsSigningParams = process.env.WINDOWS_SIGN_PARAMS;
+
 module.exports = {
   packagerConfig: {
     asar: true,
@@ -10,6 +19,8 @@ module.exports = {
     appBundleId: "com.codexdesignstudio.app",
     appCategoryType: "public.app-category.graphics-design",
     icon: process.platform === "win32" ? "desktop/assets/icon.ico" : "desktop/assets/icon.icns",
+    ...(macSigningIdentity ? { osxSign: { identity: macSigningIdentity } } : {}),
+    ...(macNotarization ? { osxNotarize: macNotarization } : {}),
     ignore: (filePath) => {
       const normalized = filePath.replaceAll("\\", "/");
       if (!normalized) return false;
@@ -42,7 +53,8 @@ module.exports = {
         name: "CodexDesignStudio",
         authors: "jberdah",
         description: "Local-first AI creative workspace powered by GPT-5.6 and Codex.",
-        setupIcon: path.join(__dirname, "desktop", "assets", "icon.ico")
+        setupIcon: path.join(__dirname, "desktop", "assets", "icon.ico"),
+        ...(windowsSigningParams ? { signWithParams: windowsSigningParams } : {})
       }
     }
   ]
