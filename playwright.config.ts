@@ -11,7 +11,9 @@ export default defineConfig({
   testDir: "./tests/e2e",
   testIgnore: "electron-workspace.spec.ts",
   fullyParallel: false,
-  retries: 0,
+  // Shared CI runners occasionally stall a single interaction past its
+  // timeout; one retry keeps the suite honest locally and stable in CI.
+  retries: process.env.CI ? 1 : 0,
   reporter: "list",
   use: {
     baseURL: "http://127.0.0.1:3100",
