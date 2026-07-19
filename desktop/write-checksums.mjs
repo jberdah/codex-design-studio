@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
@@ -8,6 +8,7 @@ const architecture = process.argv.find((value) => value.startsWith("--arch="))?.
 const makeRoot = path.join(root, "out", "make");
 const releaseRoot = path.join(root, "out", "release");
 const platform = process.platform;
+const manifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 
 async function filesBelow(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
@@ -31,7 +32,7 @@ await mkdir(releaseRoot, { recursive: true });
 
 function releaseName(file) {
   const name = path.basename(file);
-  if (name === "Setup.exe") return `Codex-Design-Studio-${platform}-${architecture}-Setup.exe`;
+  if (name === "Setup.exe") return `Codex-Design-Studio-${manifest.version}-${platform}-${architecture}-Setup.exe`;
   if (name === "RELEASES") return `RELEASES-${platform}-${architecture}`;
   return name;
 }

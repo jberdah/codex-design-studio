@@ -4,9 +4,9 @@
 
 1. Open the [latest GitHub Release](https://github.com/jberdah/codex-design-studio/releases/latest).
 2. Download the package matching the test machine:
-   - macOS Intel: `darwin-x64`;
-   - macOS Apple Silicon: `darwin-arm64`;
-   - Windows 10/11 x64: `win32-x64`.
+   - macOS Intel: `Codex-Design-Studio-0.1.0-darwin-x64.dmg`;
+   - macOS Apple Silicon: `Codex-Design-Studio-0.1.0-darwin-arm64.dmg`;
+   - Windows x64: `Codex-Design-Studio-0.1.0-win32-x64-Setup.exe`.
 3. Verify the matching entry in `SHA256SUMS-<platform>-<architecture>.txt`.
 4. Open Codex Design Studio and choose or create an empty local workspace folder.
 5. Connect a ChatGPT/Codex account from the account control. Project credentials are not stored in the workspace.
@@ -16,6 +16,18 @@
 9. Open the editable presentation and export the HTML ZIP or PowerPoint deck.
 
 Expected time: approximately five minutes after download.
+
+On macOS, place the installer and checksum file in the same folder and run:
+
+```bash
+shasum -a 256 -c SHA256SUMS-darwin-arm64.txt
+```
+
+Use `darwin-x64` instead on an Intel Mac. On Windows, run `Get-FileHash` in PowerShell and compare its output with `SHA256SUMS-win32-x64.txt`:
+
+```powershell
+Get-FileHash .\Codex-Design-Studio-0.1.0-win32-x64-Setup.exe -Algorithm SHA256
+```
 
 ## Unsigned-build notice
 

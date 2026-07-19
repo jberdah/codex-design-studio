@@ -84,7 +84,8 @@ The catalog also defines contracts for Mobile App, Wireframe, Document, Animatio
 
 - Node.js 22 LTS and npm 10+ for development;
 - a ChatGPT/Codex login or OpenAI API key for live agent and image operations;
-- macOS for the currently published desktop build.
+- macOS Intel, macOS Apple Silicon, or Windows x64 for the native release; or
+- any platform supported by Node.js and Chromium for source development.
 
 The repository pins Codex CLI `0.144.5`, Playwright `1.55.1`, and Electron `43.1.1`. No global Codex installation is required.
 
@@ -102,9 +103,14 @@ npm run check:all
 
 # Electron workspace lifecycle
 npm run test:electron
+
+# Build and test the native package for the current architecture
+npm run desktop:make -- --arch=x64
+npm run test:runtime:packaged
+npm run test:electron:packaged
 ```
 
-Desktop release commands and supported architectures are documented in the release notes once their native CI jobs pass. Generated packages are written below `out/` and are never committed.
+GitHub Actions builds and launches separate macOS Intel (`darwin-x64`), macOS Apple Silicon (`darwin-arm64`), and Windows (`win32-x64`) packages. Generated packages are written below `out/` and are never committed.
 
 ## Portable project model
 
@@ -163,6 +169,8 @@ npm run test:electron
 ```
 
 See [the detailed verification record](docs/verification.md).
+
+The submission media are generated from the real local interface with `npm run media:devpost`. A credential-free 1920×1080 walkthrough draft can be recorded with `npm run media:demo-video`.
 
 ## How this project was built during OpenAI Build Week
 

@@ -29,7 +29,7 @@ Results:
 - TypeScript generation and typecheck passed; and
 - the standalone Next.js production build passed.
 
-GitHub CI reproduced the source verification on the public repository after merge commit `d6eb4ba`.
+GitHub CI reproduced the source verification on the public repository for pull request #7.
 
 ## Covered product journeys
 
@@ -82,9 +82,17 @@ The host never treats a model summary as proof that a visual change succeeded.
 
 ## Packaged desktop evidence
 
-The previously produced macOS x64 package verified the embedded Next.js server, bundled Codex CLI, ChatGPT account visibility, project creation, Web refinement, Playwright rendering, workspace persistence, editable PPTX export, and application relaunch.
+The native release matrix passed on 19 July 2026 in [GitHub Actions run 29682734570](https://github.com/jberdah/codex-design-studio/actions/runs/29682734570):
 
-That package predates the final reference-aware bootstrap changes and is therefore not the public release candidate. Final x64, Apple Silicon, and Windows package evidence will be recorded here only after their native release workflows pass.
+- macOS Intel (`macos-15-intel`, `darwin-x64`);
+- macOS Apple Silicon (`macos-15`, `darwin-arm64`); and
+- Windows x64 (`windows-2025`, `win32-x64`).
+
+Each job independently passed TypeScript and all 164 deterministic checks, built its native distributable, verified the embedded Next.js server, executed bundled Codex CLI `0.144.5`, launched the bundled Chromium headless shell and rendered a diagnostic page, then launched and relaunched the packaged Electron application through the workspace lifecycle journey.
+
+Release staging keeps only one primary installer per platform plus its SHA-256 manifest: DMG for macOS and Setup.exe for Windows. Development ZIPs and Squirrel update payloads are not duplicated in the public release.
+
+The packages are architecture-native rather than cross-compiled. This proves startup and the critical embedded runtimes on the target operating system, but it is not a claim that every historical OS release is supported. The Build Week packages are unsigned and unnotarized.
 
 ## Known build warning
 
