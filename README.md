@@ -9,6 +9,8 @@ Codex Design Studio is a local-first desktop workspace for founders and small pr
 
 Most AI design tools stop at a plausible screenshot. Codex Design Studio edits the real artifact, renders the result, and keeps the proposed change separate until deterministic checks and the user accept it.
 
+![Codex Design Studio turns one brand into every future asset](media/devpost/01-one-brand-every-future-asset.png)
+
 ## Judge quick start
 
 The shortest reproducible path is:
