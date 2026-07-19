@@ -19,6 +19,7 @@ export interface WebArtifactEditorProps {
   initialScope?: ResponsiveScope;
   onChange?: (document: WebDocument, session: ArtifactEditSession<WebDocument>) => void;
   onAutosave?: (document: WebDocument, session: ArtifactEditSession<WebDocument>) => void | Promise<void>;
+  onSelectNode?: (selection: { nodeId: string; label: string; text: string }) => void;
 }
 
 function interactionScript(channel: string) { return `<script nonce="${channel}">(function(){
@@ -57,7 +58,7 @@ export function buildWebEditorPreview(document: WebDocument, channel: string) {
   return /<\/body>/i.test(html) ? html.replace(/<\/body>/i, `${script}</body>`) : `${html}${script}`;
 }
 
-export function WebArtifactEditor({ artifactId, document, sessionId = `web-${artifactId}`, initialScope = "shared", onChange, onAutosave }: WebArtifactEditorProps) {
+export function WebArtifactEditor({ artifactId, document, sessionId = `web-${artifactId}`, initialScope = "shared", onChange, onAutosave, onSelectNode }: WebArtifactEditorProps) {
   const channel = useId().replace(/[^a-z0-9_-]/gi, "") || "studio-channel";
   const iframe = useRef<HTMLIFrameElement>(null);
   const [session, setSession] = useState(() => createArtifactEditSession({ sessionId, artifactId, document }));
@@ -163,7 +164,11 @@ export function WebArtifactEditor({ artifactId, document, sessionId = `web-${art
   useEffect(() => {
     const receive = (event: MessageEvent) => {
       if (event.source !== iframe.current?.contentWindow || event.data?.channel !== channel) return;
-      if (event.data?.type === "artifact-web-selection" && typeof event.data.nodeId === "string") { setNodeId(event.data.nodeId); setNodeLabel(String(event.data.label ?? event.data.nodeId)); setAnnouncement(`Selected ${event.data.label ?? event.data.nodeId}`); }
+      if (event.data?.type === "artifact-web-selection" && typeof event.data.nodeId === "string") {
+        const label = String(event.data.label ?? event.data.nodeId);
+        setNodeId(event.data.nodeId); setNodeLabel(label); setAnnouncement(`Selected ${label}`);
+        onSelectNode?.({ nodeId: event.data.nodeId, label, text: typeof event.data.text === "string" ? event.data.text : "" });
+      }
       if (event.data?.type === "artifact-web-text" && typeof event.data.nodeId === "string" && typeof event.data.text === "string") {
         const direction = event.data.selection?.direction === "forward" || event.data.selection?.direction === "backward" ? event.data.selection.direction : "none";
         commit("Edited Web text", { type: "web.text", nodeId: event.data.nodeId, text: event.data.text, selection: { anchor: Math.min(event.data.text.length, Number(event.data.selection?.anchor) || 0), focus: Math.min(event.data.text.length, Number(event.data.selection?.focus) || 0), direction } });

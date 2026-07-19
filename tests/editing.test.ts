@@ -144,7 +144,41 @@ beforeEach(async () => {
 afterEach(async () => {
   if (previousDataDirectory === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = previousDataDirectory;
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
+});
+
+describe("generated control catalog and scopes", () => {
+  it("advertises only scopes the engine can apply", () => {
+    for (const control of GENERATED_ARTIFACT_CONTROLS) {
+      const slideCapable = control.scopes.some((scope) => scope === "selection" || scope === "group" || scope === "slide");
+      const engineSupportsSlides = ["typography.size", "typography.weight", "typography.lineHeight", "color.foreground", "color.background", "density"].includes(control.id);
+      expect(slideCapable).toBe(engineSupportsSlides);
+    }
+  });
+
+  it("rejects invalid hex colour lengths and accepts CSS forms", () => {
+    const document = slides();
+    const control = (value: string) => applyArtifactEdits(document, [{ type: "slide.control", slideId: "slide-1", nodeIds: ["a"], control: "color.foreground", value, scope: "selection" }]);
+    expect(() => control("#12345")).toThrow(/hexadecimal/);
+    expect(() => control("#1234567")).toThrow(/hexadecimal/);
+    for (const valid of ["#abc", "#abcd", "#aabbcc", "#aabbccdd"]) expect(() => control(valid)).not.toThrow();
+  });
+
+  it("expands the slide scope to applicable nodes and keeps selection strict", () => {
+    const scoped = applyArtifactEdits(slides(), [{ type: "slide.control", slideId: "slide-1", nodeIds: ["a"], control: "typography.size", value: 32, scope: "slide" }]).document;
+    const nodes = scoped.slides[0].nodes;
+    expect(nodes.filter((node) => node.type === "text").every((node) => node.type === "text" && node.style?.fontSize === 32)).toBe(true);
+    expect(() => applyArtifactEdits(slides(), [{ type: "slide.control", slideId: "slide-1", nodeIds: ["c"], control: "typography.size", value: 32, scope: "selection" }])).toThrow(/text nodes/);
+  });
+
+  it("guards density against group nodes and clamps scaled frames to the canvas", () => {
+    const grouped = applyArtifactEdits(slides(), [{ type: "slide.group", slideId: "slide-1", nodeIds: ["a", "b"], groupId: "group-1" }]).document;
+    expect(() => applyArtifactEdits(grouped, [{ type: "slide.control", slideId: "slide-1", nodeIds: ["group-1"], control: "density", value: 1.5, scope: "selection" }])).toThrow(/group/);
+    const dense = applyArtifactEdits(slides(), [{ type: "slide.control", slideId: "slide-1", nodeIds: ["c"], control: "density", value: 2, scope: "selection" }]).document;
+    const shape = dense.slides[0].nodes.find((node) => node.id === "c")!;
+    expect(shape.frame.width).toBeLessThanOrEqual(SLIDE_DIMENSIONS.wide.width - shape.frame.x);
+    expect(shape.frame.height).toBeLessThanOrEqual(SLIDE_DIMENSIONS.wide.height - shape.frame.y);
+  });
 });
 
 describe("persisted edit transactions", () => {

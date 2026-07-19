@@ -15,10 +15,22 @@ beforeEach(async () => {
 afterEach(async () => {
   if (priorDataDir === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = priorDataDir;
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
 });
 
 describe("resumable project bootstrap", () => {
+  it("surfaces a non-blocking audience question when intake leaves it blank", async () => {
+    const { createBootstrapQuestions } = await import("@/domain/bootstrap");
+    const questions = createBootstrapQuestions({ brandName: "Relay", objective: "Explain the product clearly.", targetDeliverable: "web" });
+    const audience = questions.find((question) => question.field === "audience");
+    expect(audience).toBeDefined();
+    expect(audience?.required).toBe(false);
+    const { createBootstrapSession } = await import("@/server/bootstrap");
+    const session = await createBootstrapSession({ brandName: "Relay", objective: "Explain the product clearly.", targetDeliverable: "web" });
+    expect(session.status).toBe("ready");
+    expect(session.questions.some((question) => question.field === "audience")).toBe(true);
+  });
+
   it("persists immutable intake and provenance links without creating a project", async () => {
     const { createBootstrapSession, loadBootstrapSession } = await import("@/server/bootstrap");
     const input = {

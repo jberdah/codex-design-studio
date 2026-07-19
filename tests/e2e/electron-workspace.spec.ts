@@ -100,6 +100,6 @@ test("portable workspace survives Electron/package relaunch and can be revoked",
     expect(await recentWorkspaces(application)).toEqual([]);
   } finally {
     await application?.close().catch(() => undefined);
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
   }
 });

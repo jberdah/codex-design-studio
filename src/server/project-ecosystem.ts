@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ArtifactAction } from "@/domain/artifacts";
 import type { NamedDesignSystem, ProjectEcosystemRegistry, ProjectSkill, ProjectSkillCapability } from "@/domain/project-ecosystem";
@@ -7,6 +7,7 @@ import { getTemplate } from "./catalog";
 import { loadBrandSystemVersion } from "./brand-system";
 import { safeProjectPath } from "./paths";
 import { ensureProject } from "./store";
+import { renameWithRetry } from "./fs-atomic";
 
 const mutations = new Map<string, Promise<void>>();
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,127}$/;
@@ -42,7 +43,7 @@ export async function loadProjectEcosystem(projectId: string): Promise<ProjectEc
 
 async function atomicJson(target: string, value: unknown) {
   const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8"); await rename(temporary, target);
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8"); await renameWithRetry(temporary, target);
 }
 
 async function mutate<T>(projectId: string, operation: (registry: ProjectEcosystemRegistry) => T | Promise<T>) {

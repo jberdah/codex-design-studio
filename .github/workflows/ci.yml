@@ -15,9 +15,17 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, test, build, and browser E2E
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        # The product targets macOS Apple Silicon, macOS Intel, and Windows;
+        # the suite must stay green on every runtime judges can use.
+        # macos-15-intel matches the release matrix; macos-13 is being retired
+        # and its runner queue is unreliable.
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
 
     steps:
       - name: Check out repository
@@ -32,10 +40,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Resolve Playwright version
+        id: playwright-version
+        shell: bash
+        run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/ms-playwright
+            ~/Library/Caches/ms-playwright
+            ~/AppData/Local/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
+
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
       - name: Audit production dependencies
+        if: runner.os == 'Linux'
         run: npm audit --omit=dev --audit-level=high
 
       - name: Run complete verification

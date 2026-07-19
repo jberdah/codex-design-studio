@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   BackgroundJob,
@@ -14,6 +14,7 @@ import type {
 } from "@/domain/background-jobs";
 import { safeProjectPath } from "./paths";
 import { ensureProject } from "./store";
+import { renameWithRetry } from "./fs-atomic";
 
 const mutations = new Map<string, Promise<void>>();
 const MAX_PAYLOAD_BYTES = 1_000_000;
@@ -59,7 +60,7 @@ async function load(projectId: string): Promise<BackgroundQueueState> {
 async function atomicJson(file: string, value: unknown) {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, file);
+  await renameWithRetry(temporary, file);
 }
 
 async function mutate<T>(projectId: string, operation: (state: BackgroundQueueState) => T | Promise<T>) {

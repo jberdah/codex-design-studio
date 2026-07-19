@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { SelectionContext } from "@/domain/types";
 import type { WebVisualCheckReport } from "@/domain/quality";
 import type { assessWebMutation } from "./quality";
 import { safeProjectPath } from "./paths";
 import { activateCustomLanding, loadLandingHtml, loadProject } from "./store";
+import { renameWithRetry } from "./fs-atomic";
 
 export type WebMutationAssessment = ReturnType<typeof assessWebMutation>;
 export type WebRefinementCandidateStatus = "pending" | "accepted" | "rejected";
@@ -50,7 +51,7 @@ function assertCandidateId(id: string) {
 async function atomicJson(file: string, value: unknown) {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, file);
+  await renameWithRetry(temporary, file);
 }
 
 async function candidateDirectory(projectId: string, candidateId: string) {

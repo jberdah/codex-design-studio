@@ -1,0 +1,12 @@
+{
+  "attempt": 1,
+  "candidateIds": [],
+  "finishedAt": "2026-07-19T21:48:38.839Z",
+  "id": "run_375b4432-ac73-480d-b7be-d95add1d8475",
+  "phase": "manual evidence recorded",
+  "progress": 100,
+  "requestedAt": "2026-07-19T21:48:38.787Z",
+  "sourceId": "src_658c9aab40e73f52f7a2",
+  "startedAt": "2026-07-19T21:48:38.839Z",
+  "status": "succeeded"
+}

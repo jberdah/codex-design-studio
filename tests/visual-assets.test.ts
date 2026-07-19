@@ -17,7 +17,7 @@ beforeEach(async () => {
 afterEach(async () => {
   if (priorDataDir === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = priorDataDir;
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
 });
 
 async function publishedBrandSystem(projectId: string) {
@@ -151,9 +151,14 @@ describe("visual asset contracts and immutable workflow", () => {
     const brandSystemVersionId = await publishedBrandSystem("cancel");
     const visual = await import("@/server/visual-assets");
     const controller = new AbortController();
-    const mock = adapter((_request, signal) => new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true })));
+    // The run is persisted as "running" before the adapter is invoked, so the
+    // adapter call itself is the deterministic in-flight signal — no polling.
+    let adapterInvoked!: () => void;
+    const invoked = new Promise<void>((resolve) => { adapterInvoked = resolve; });
+    const mock = adapter((_request, signal) => { adapterInvoked(); return new Promise((_resolve, reject) => signal?.addEventListener("abort", () => reject(new DOMException("cancelled", "AbortError")), { once: true })); });
     const pending = visual.generateVisualAsset("cancel", "hero", brief(brandSystemVersionId, 1), mock, { signal: controller.signal });
-    await vi.waitFor(async () => expect((await visual.loadVisualAssetRegistry("cancel")).runs[0]?.status).toBe("running"));
+    await invoked;
+    expect((await visual.loadVisualAssetRegistry("cancel")).runs[0]?.status).toBe("running");
     controller.abort();
     await expect(pending).rejects.toThrow("cancelled");
     expect((await visual.loadVisualAssetRegistry("cancel")).runs[0]).toMatchObject({ status: "cancelled", attempts: [{ status: "cancelled" }] });

@@ -100,7 +100,24 @@
         "label": "shared source of truth"
       }
     ],
-    "finalHeadline": "Move from climate ambition to operational clarity."
+    "finalHeadline": "Move from climate ambition to operational clarity.",
+    "navigation": {
+      "showIcons": false,
+      "items": [
+        {
+          "label": "Platform",
+          "icon": "layers"
+        },
+        {
+          "label": "Approach",
+          "icon": "compass"
+        },
+        {
+          "label": "Insights",
+          "icon": "chart"
+        }
+      ]
+    }
   },
   "slides": [
     {

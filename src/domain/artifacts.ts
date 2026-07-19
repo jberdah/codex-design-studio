@@ -164,6 +164,45 @@ export function createWebDocument(input: WebDocumentInput): WebDocument {
   };
 }
 
+/**
+ * Mirrors every unique data-design-id anchor as a data-design-node-id anchor
+ * so authored artifacts become directly editable without rewriting content.
+ * Only the first occurrence of an id is anchored because edit anchors must be
+ * unique; templates and Codex output use double-quoted attributes.
+ */
+export function ensureWebNodeAnchors(html: string): string {
+  const seen = new Set<string>(anchoredNodeIds(html));
+  return html.replace(/<[a-z][^>]*\bdata-design-id\s*=\s*"([^"]+)"[^>]*>/gi, (tag, id: string) => {
+    if (seen.has(id) || /\bdata-design-node-id\s*=/i.test(tag)) return tag;
+    seen.add(id);
+    return tag.replace(/\bdata-design-id\s*=\s*"[^"]*"/i, (anchor) => `${anchor} data-design-node-id="${id}"`);
+  });
+}
+
+const DIRECT_EDIT_STYLE_PATTERN = /<style id="studio-direct-edits">([\s\S]*?)<\/style>\s*/i;
+
+/** Splits previously saved direct-edit styles out of authored HTML so an edit session can resume them. */
+export function extractDirectEditStyles(html: string): { html: string; code: string } {
+  const match = html.match(DIRECT_EDIT_STYLE_PATTERN);
+  if (!match) return { html, code: "" };
+  return { html: html.replace(DIRECT_EDIT_STYLE_PATTERN, ""), code: match[1].trim() };
+}
+
+/** Serializes an edited WebDocument back to a single self-contained HTML source. */
+export function serializeWebDocumentHtml(document: WebDocument): string {
+  const css = document.stylesheets
+    .map((sheet) => sheet.media ? `@media ${sheet.media}{${sheet.code}}` : sheet.code)
+    .join("\n")
+    .replace(/<\/style/gi, "<\\/style")
+    .trim();
+  const { html } = extractDirectEditStyles(document.html);
+  if (!css) return html;
+  const block = `<style id="studio-direct-edits">${css}</style>`;
+  if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${block}</head>`);
+  if (/<html\b[^>]*>/i.test(html)) return html.replace(/<html\b[^>]*>/i, (opening) => `${opening}<head>${block}</head>`);
+  return `${block}${html}`;
+}
+
 export const SLIDE_DIMENSIONS = {
   wide: { width: 960, height: 540, unit: "pt" },
   standard: { width: 720, height: 540, unit: "pt" }

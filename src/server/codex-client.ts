@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -8,6 +8,7 @@ import type { WebVisualCheckReport } from "@/domain/quality";
 import type { ProjectData, SelectionContext } from "@/domain/types";
 import type { ProjectPatch } from "./refine";
 import { bundleRoot, codexEntrypoint, safeProjectPath, safeProjectRoot } from "./paths";
+import { writeTextAtomic } from "./store";
 
 type RpcMessage = { id?: number; method?: string; result?: unknown; error?: { message?: string }; params?: Record<string, unknown> };
 
@@ -51,6 +52,7 @@ class AppServerConnection {
   private requestId = 0;
   private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   private listeners = new Set<(message: RpcMessage) => void>();
+  private closed = false;
 
   constructor() {
     this.child = spawn(process.execPath, [codexEntrypoint, "app-server", "--stdio"], { cwd: bundleRoot, env: process.env, stdio: ["pipe", "pipe", "pipe"] });
@@ -70,6 +72,13 @@ class AppServerConnection {
       this.pending.forEach(({ reject }) => reject(error));
       this.pending.clear();
     });
+    this.child.on("close", (code) => {
+      if (this.closed) return;
+      const message = `The Codex App Server exited before completing the request${code === null ? "" : ` (code ${code})`}.`;
+      this.pending.forEach(({ reject }) => reject(new Error(message)));
+      this.pending.clear();
+      this.listeners.forEach((listener) => listener({ method: "error", params: { error: { message } } }));
+    });
   }
 
   request(method: string, params: unknown, timeoutMs = 90_000) {
@@ -83,7 +92,7 @@ class AppServerConnection {
 
   notify(method: string, params: unknown = {}) { this.child.stdin.write(`${JSON.stringify({ method, params })}\n`); }
   onMessage(listener: (message: RpcMessage) => void) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
-  close() { this.child.kill(); }
+  close() { this.closed = true; this.child.kill(); }
 }
 
 const studioModel = () => process.env.CODEX_STUDIO_MODEL ?? "gpt-5.6-sol";
@@ -160,14 +169,14 @@ export async function runCodexWebRefinement(project: ProjectData, instruction: s
     await completed;
     const after = await readFile(landingPath, "utf8");
     if (!validEditableLanding(after)) {
-      await writeFile(landingPath, before, "utf8");
+      await writeTextAtomic(landingPath, before);
       throw new Error("Codex removed required preview instrumentation; the original artifact was restored.");
     }
     const report = parseJsonOutput<{ summary: string; filesModified: string[]; visualNotes: string; unsupportedReason: string | null }>(output);
     const changed = digest(before) !== digest(after);
     return { source: "codex", summary: changed ? report.summary : "No source change was applied.", unsupportedReason: changed ? undefined : report.unsupportedReason ?? "Codex did not change the artifact.", threadId, changed, filesModified: changed ? ["web/index.html"] : [] };
   } catch (error) {
-    await writeFile(landingPath, before, "utf8");
+    await writeTextAtomic(landingPath, before);
     throw error;
   } finally {
     connection.close();

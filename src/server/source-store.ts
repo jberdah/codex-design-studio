@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   Candidate,
@@ -26,6 +26,7 @@ import type {
 import { ensureProject } from "./store";
 import { safeProjectPath } from "./paths";
 import { assertSafeWebUrl } from "./network-policy";
+import { renameWithRetry } from "./fs-atomic";
 
 const graphFileName = "graph.json";
 const mutationQueues = new Map<string, Promise<void>>();
@@ -169,12 +170,12 @@ async function writeGraph(projectId: string, graph: ProvenanceGraph) {
   const paths = await sourcePaths(projectId);
   const temp = `${paths.graph}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temp, deterministicProvenanceJson(graph), "utf8");
-  await rename(temp, paths.graph);
+  await renameWithRetry(temp, paths.graph);
   for (const run of graph.extractionRuns) {
     const runPath = path.join(paths.runs, `${run.id}.json`);
     const runTemp = `${runPath}.${process.pid}.${randomUUID()}.tmp`;
     await writeFile(runTemp, `${JSON.stringify(sortObject(run), null, 2)}\n`, "utf8");
-    await rename(runTemp, runPath);
+    await renameWithRetry(runTemp, runPath);
   }
 }
 
@@ -245,7 +246,7 @@ export async function addSource(projectId: string, input: AddSourceInput): Promi
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       const blobTemp = `${absoluteBlob}.${process.pid}.${randomUUID()}.tmp`;
       await writeFile(blobTemp, input.content);
-      await rename(blobTemp, absoluteBlob);
+      await renameWithRetry(blobTemp, absoluteBlob);
     }
     const timestamp = now();
     const source: Source = {

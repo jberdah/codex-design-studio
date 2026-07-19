@@ -29,7 +29,7 @@ describe("project workspace boundary", () => {
     try {
       await expect(canonicalPathInside(root, path.join(root, "escape", "new-file"))).rejects.toThrow("escapes authorized workspace");
     } finally {
-      await rm(parent, { recursive: true, force: true });
+      await rm(parent, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
     }
   });
 });

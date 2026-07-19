@@ -19,7 +19,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
   if (priorDataDir === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = priorDataDir;
-  await rm(workspace, { recursive: true, force: true });
+  await rm(workspace, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 });
 });
 
 function image(width = 64, height = 64) {

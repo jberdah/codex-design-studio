@@ -1,9 +1,10 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import { defaultProject } from "@/domain/defaults";
 import type { ProjectData, ProjectSummary } from "@/domain/types";
 import { safeProjectPath, safeProjectRoot, safeProjectsRoot } from "./paths";
 import { renderLandingHtml, tokensToCss } from "./landing";
+import { renameWithRetry } from "./fs-atomic";
 
 const projectMutationQueues = new Map<string, Promise<void>>();
 
@@ -18,10 +19,14 @@ async function serializeProject<T>(projectId: string, operation: () => Promise<T
   finally { release(); if (projectMutationQueues.get(projectId) === queued) projectMutationQueues.delete(projectId); }
 }
 
-async function writeJsonAtomic(filePath: string, value: unknown) {
+export async function writeTextAtomic(filePath: string, contents: string) {
   const temp = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temp, filePath);
+  await writeFile(temp, contents, "utf8");
+  await renameWithRetry(temp, filePath);
+}
+
+async function writeJsonAtomic(filePath: string, value: unknown) {
+  await writeTextAtomic(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
 export async function ensureProject(projectId = "demo") {
@@ -66,7 +71,7 @@ export async function loadLandingHtml(projectId = "demo") {
 
 export async function writeLandingHtml(projectId: string, html: string) {
   await ensureProject(projectId);
-  await writeFile(await safeProjectPath(projectId, "web", "index.html"), html, "utf8");
+  await writeTextAtomic(await safeProjectPath(projectId, "web", "index.html"), html);
 }
 
 export async function activateCustomLanding(projectId: string, input: {
@@ -86,14 +91,14 @@ export async function activateCustomLanding(projectId: string, input: {
     const currentHash = createHash("sha256").update(originalHtml).digest("hex");
     if (currentHash !== input.expectedSourceHash) throw new Error("This candidate is stale because the active Web source changed.");
     try {
-      await writeFile(landing, input.html, "utf8");
+      await writeTextAtomic(landing, input.html);
       project.version += 1;
       project.lastSummary = input.summary;
       project.webCustomized = true;
       if (input.threadId) project.threadId = input.threadId;
       return await saveProjectFiles(project, { renderWeb: false });
     } catch (error) {
-      await writeFile(landing, originalHtml);
+      await writeTextAtomic(landing, originalHtml);
       throw error;
     }
   });
@@ -137,10 +142,10 @@ async function saveProjectFiles(project: ProjectData, options: SaveProjectOption
     writeJsonAtomic(manifest, project),
     writeJsonAtomic(brand, project.brand),
     writeJsonAtomic(tokensJson, project.tokens),
-    writeFile(tokensCss, `${tokensToCss(project)}\n`, "utf8"),
+    writeTextAtomic(tokensCss, `${tokensToCss(project)}\n`),
     writeJsonAtomic(deck, project.slideDocument ?? project.slides)
   ];
-  if (renderWeb) writes.push(writeFile(landing, renderLandingHtml(project), "utf8"));
+  if (renderWeb) writes.push(writeTextAtomic(landing, renderLandingHtml(project)));
   if (writeInitial) writes.push(writeJsonAtomic(initial, project));
   await Promise.all(writes);
   return project;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { BrandProfile, DesignTokens, LandingContent, ProjectData } from "@/domain/types";
+import { readJsonBody } from "@/server/http";
 import { createSlideDocument } from "@/domain/artifacts";
 import { validHexColors } from "@/server/review";
 import { loadLandingHtml, loadProject, mutateProject } from "@/server/store";
@@ -14,7 +15,8 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const body = await request.json() as Partial<Pick<ProjectData, "brand" | "tokens" | "landing" | "slides" | "slideDocument">> & { expectedVersion?: number };
+  const body = await readJsonBody<Partial<Pick<ProjectData, "brand" | "tokens" | "landing" | "slides" | "slideDocument">> & { expectedVersion?: number }>(request);
+  if (!body) return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
   if (!Number.isInteger(body.expectedVersion) || (body.expectedVersion as number) < 0) return NextResponse.json({ error: "An integer expectedVersion is required for project mutations." }, { status: 400 });
   if (body.slides !== undefined && !Array.isArray(body.slides)) return NextResponse.json({ error: "Slides must be an array." }, { status: 400 });
   const projectId = activeProjectId(request);

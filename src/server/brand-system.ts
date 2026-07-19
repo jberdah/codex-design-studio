@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   ArtifactBinding,
@@ -18,6 +18,7 @@ import { safeProjectPath } from "./paths";
 import { loadProvenanceGraph } from "./source-store";
 import { ensureProject, loadProject, saveProjectManifest } from "./store";
 import { validHexColors } from "./review";
+import { renameWithRetry } from "./fs-atomic";
 
 function now() { return new Date().toISOString(); }
 const mutationQueues = new Map<string, Promise<void>>();
@@ -75,7 +76,7 @@ export function validateBrandSystemContent(brand: ProjectData["brand"], tokens: 
 async function atomicJson(filePath: string, value: unknown) {
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(stable(value), null, 2)}\n`, "utf8");
-  await rename(temporary, filePath);
+  await renameWithRetry(temporary, filePath);
 }
 
 async function storage(projectId: string) {

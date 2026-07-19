@@ -49,10 +49,16 @@ if (codexResult.status !== 0 || !/codex/i.test(`${codexResult.stdout}${codexResu
   throw new Error(`Packaged Codex failed: ${codexResult.stderr || codexResult.stdout}`);
 }
 
+// Exercise the exact resolution path the embedded server uses at runtime:
+// web-capture.ts resolves playwright from the bundle root (studio-runtime)
+// via createRequire, and desktop/main.cjs exposes the packaged browsers
+// through PLAYWRIGHT_BROWSERS_PATH. Injecting an explicit executablePath
+// here would hide a broken bundle.
+process.env.PLAYWRIGHT_BROWSERS_PATH = browsers;
 const playwrightPath = require.resolve("playwright", { paths: [path.join(runtime, "node_modules")] });
 const playwrightModule = await import(pathToFileURL(playwrightPath).href);
 const { chromium } = playwrightModule.default ?? playwrightModule;
-const browser = await chromium.launch({ headless: true, executablePath: browserExecutable });
+const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 await page.setContent("<main><h1>Codex Design Studio packaged runtime</h1></main>");
 if (await page.locator("h1").textContent() !== "Codex Design Studio packaged runtime") {
