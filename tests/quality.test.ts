@@ -139,10 +139,35 @@ describe("source/render proof and transactional rollback", () => {
     const after = report("after", render({ pixelDifference: 0.15, findings: [oldError] }));
     expect(quality.assessWebMutation({ beforeSource: "old", afterSource: "new", beforeReport: before, report: after, claimedChanged: true })).toMatchObject({ accepted: true, sourceChanged: true, renderedChanged: true });
 
-    const introduced = report("after", render({ pixelDifference: 0.15, findings: [oldError, { id: "desktop:overflow", status: "error", message: "New overflow", evidence: {} }] }));
+    const introduced = report("after", render({ pixelDifference: 0.15, horizontalOverflow: true, findings: [oldError, { id: "desktop:overflow", status: "error", message: "New overflow", evidence: {} }] }));
     const rejected = quality.assessWebMutation({ beforeSource: "old", afterSource: "new", beforeReport: before, report: introduced, claimedChanged: true });
     expect(rejected.accepted).toBe(false);
     expect(rejected.deterministicErrors.map((finding) => finding.id)).toEqual(["desktop:overflow"]);
+  });
+
+  it("accepts a real contrast improvement even when inconclusive evidence increases", async () => {
+    const quality = await import("@/server/quality");
+    const violation = (index: number, ratio: number) => ({ locator: `#text-${index}`, ratio, required: 4.5, foreground: "#777", background: "#fff", conclusive: true });
+    const inconclusive = (index: number) => ({ locator: `#visual-${index}`, ratio: null, required: 4.5, foreground: "color(srgb .5 .5 .5)", background: "visual", conclusive: false, reason: "pixel sampling" });
+    const beforeContrast = Array.from({ length: 7 }, (_, index) => violation(index, 1.13));
+    const afterContrast = [...Array.from({ length: 6 }, (_, index) => violation(index, 3.11)), ...Array.from({ length: 3 }, (_, index) => inconclusive(index))];
+    const before = report("before", render({ contrast: beforeContrast, findings: [{ id: "desktop:contrast", status: "error", message: "7 failures", evidence: beforeContrast }] }));
+    const after = report("after", render({ pixelDifference: 0.2, contrast: afterContrast, findings: [{ id: "desktop:contrast", status: "error", message: "6 failures", evidence: afterContrast }] }));
+    const assessed = quality.assessWebMutation({ beforeSource: "old", afterSource: "new", beforeReport: before, report: after, claimedChanged: true });
+    expect(assessed.accepted).toBe(true);
+    expect(assessed.requiresUserDecision).toBe(true);
+    expect(assessed.comparisons.desktop).toMatchObject({ before: { failures: 7, inconclusive: 0 }, after: { failures: 6, inconclusive: 3 }, regressions: [], warnings: ["contrast measurement"] });
+  });
+
+  it("rejects a genuine contrast regression using conclusive deficits rather than evidence length", async () => {
+    const quality = await import("@/server/quality");
+    const contrast = (ratio: number) => [{ locator: "#copy", ratio, required: 4.5, foreground: "#777", background: "#fff", conclusive: true }];
+    const before = report("before", render({ contrast: contrast(4), findings: [{ id: "desktop:contrast", status: "error", message: "Existing failure", evidence: contrast(4) }] }));
+    const after = report("after", render({ pixelDifference: 0.2, contrast: contrast(2), findings: [{ id: "desktop:contrast", status: "error", message: "Worse failure", evidence: contrast(2) }] }));
+    const assessed = quality.assessWebMutation({ beforeSource: "old", afterSource: "new", beforeReport: before, report: after, claimedChanged: true });
+    expect(assessed.accepted).toBe(false);
+    expect(assessed.comparisons.desktop.regressions).toEqual(["contrast"]);
+    expect(assessed.deterministicErrors.map((finding) => finding.id)).toEqual(["desktop:contrast"]);
   });
 
   it("restores exact prior bytes when validation rejects or mutation throws", async () => {

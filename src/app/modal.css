@@ -50,6 +50,121 @@
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 .modal-actions .primary-button:disabled { opacity: .4; cursor: not-allowed; }
 
+.bootstrap-modal {
+  width: min(780px, 100%);
+  max-height: min(900px, calc(100vh - 32px));
+  overflow: auto;
+  padding: 25px 28px 28px;
+}
+
+.bootstrap-modal .modal-heading { padding-bottom: 16px; }
+.bootstrap-modal .modal-heading h2 { font-size: 29px; }
+.bootstrap-modal .modal-heading > button:disabled { opacity: .4; }
+.bootstrap-progress { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin: 15px 0 0; padding: 0; list-style: none; }
+.bootstrap-progress li { min-width: 0; }
+.bootstrap-progress button { width: 100%; display: flex; align-items: center; gap: 7px; border: 0; background: transparent; padding: 5px; color: #9a959f; font-size: 9px; text-align: left; }
+.bootstrap-progress button:disabled { opacity: 1; }
+.bootstrap-progress button > span { width: 21px; height: 21px; flex: none; display: grid; place-items: center; border-radius: 50%; border: 1px solid #ded9e3; background: #faf9fb; font-size: 8px; }
+.bootstrap-progress li.active button { color: var(--ink); font-weight: 700; }
+.bootstrap-progress li.active button > span { border-color: var(--violet); background: var(--violet); color: white; }
+.bootstrap-progress li.complete button { color: #42785e; }
+.bootstrap-progress li.complete button > span { border-color: #cce8d9; background: #e8f7ef; color: #28754e; }
+.bootstrap-panel { margin-top: 18px; }
+.bootstrap-intro { display: grid; gap: 5px; }
+.bootstrap-intro > small { color: var(--violet); font-size: 8px; letter-spacing: .13em; }
+.bootstrap-intro h3 { margin: 0; font: 23px/1.1 Georgia, serif; }
+.bootstrap-intro p { max-width: 640px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.bootstrap-form { margin-top: 16px; }
+.bootstrap-form label > em, .bootstrap-reference label > em { margin-left: 3px; color: #aaa5ae; font-style: normal; font-weight: 400; }
+.bootstrap-form .span-two { grid-column: span 2; }
+.bootstrap-choice-group { margin: 15px 0 0; padding: 0; border: 0; }
+.bootstrap-choice-group legend { margin-bottom: 7px; color: #625d68; font-size: 10px; font-weight: 650; }
+.bootstrap-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bootstrap-choices label { position: relative; display: grid; grid-template-columns: 31px 1fr; column-gap: 9px; align-items: center; min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 11px; background: #fcfbfd; cursor: pointer; }
+.bootstrap-choices label.selected { border-color: #9983f6; background: #f6f3ff; box-shadow: inset 0 0 0 1px #c9bdfb; }
+.bootstrap-choices label:focus-within { outline: 2px solid #8a71f4; outline-offset: 2px; }
+.bootstrap-choices input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.bootstrap-choices label > span { grid-row: span 2; width: 31px; height: 31px; display: grid; place-items: center; border-radius: 8px; background: #ece9ef; color: #655f6a; }
+.bootstrap-choices label.selected > span { background: var(--violet); color: white; }
+.bootstrap-choices strong { min-width: 0; font-size: 10px; }
+.bootstrap-choices small { margin-top: 2px; color: var(--muted); font-size: 8px; }
+.bootstrap-reference { display: grid; gap: 5px; margin-top: 16px; }
+.bootstrap-reference label { display: grid; gap: 6px; color: #625d68; font-size: 10px; font-weight: 650; }
+.bootstrap-reference input, .brief-editor input, .brief-editor textarea, .bootstrap-questions textarea, .bootstrap-questions select { width: 100%; border: 1px solid var(--line); border-radius: 9px; padding: 10px 11px; outline: 0; background: #fcfbfd; color: var(--ink); font: 10px/1.4 inherit; }
+.bootstrap-reference > small { color: var(--muted); font-size: 8px; }
+.field-error { margin: 0; color: #a13d3d; font-size: 8px; }
+.reference-choices label { min-height: 62px; }
+.bootstrap-responsibility { display: flex; align-items: flex-start; gap: 8px; margin-top: 11px; padding: 9px 10px; border: 1px solid #eadbc6; border-radius: 9px; background: #fffaf2; color: #7c613e; }
+.bootstrap-responsibility > span { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #f2dfc2; font-size: 8px; font-weight: 800; }
+.bootstrap-responsibility p { margin: 0; font-size: 8px; line-height: 1.45; }
+.bootstrap-responsibility strong { display: block; color: #6d4f28; font-size: 8px; }
+.bootstrap-trust-note { display: flex; gap: 9px; align-items: center; margin-top: 12px; padding: 9px 11px; border-radius: 9px; background: #f1f7f4; color: #3e6953; }
+.bootstrap-trust-note > span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 7px; background: white; }
+.bootstrap-trust-note p { margin: 0; font-size: 8px; line-height: 1.45; }
+.bootstrap-trust-note strong { display: block; font-size: 9px; }
+.bootstrap-error { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 11px; border: 1px solid #efd7bb; border-radius: 10px; background: #fff8ee; }
+.bootstrap-error > div:first-child { display: grid; gap: 3px; }
+.bootstrap-error strong { font-size: 9px; color: #7d521d; }
+.bootstrap-error p { margin: 0; color: #8e6b43; font-size: 8px; }
+.bootstrap-error > div:last-child { display: flex; align-items: center; gap: 5px; }
+.bootstrap-error button { white-space: nowrap; }
+.bootstrap-loading { display: grid; justify-items: center; gap: 6px; margin-top: 16px; padding: 28px; border: 1px dashed #d9d3df; border-radius: 12px; background: #faf9fb; text-align: center; }
+.bootstrap-loading > span { width: 35px; height: 35px; display: grid; place-items: center; border-radius: 10px; background: var(--ink); color: white; }
+.bootstrap-loading strong { font-size: 10px; }
+.bootstrap-loading p { margin: 0; color: var(--muted); font-size: 8px; }
+.bootstrap-questions { display: grid; gap: 10px; margin-top: 15px; }
+.bootstrap-questions > div:first-child { display: grid; gap: 2px; }
+.bootstrap-questions > div:first-child strong { font-size: 10px; }
+.bootstrap-questions > div:first-child span { color: var(--muted); font-size: 8px; }
+.bootstrap-questions label { position: relative; display: grid; gap: 5px; color: #514c57; font-size: 9px; font-weight: 650; }
+.bootstrap-questions label > b { position: absolute; top: 0; right: 0; color: #8b6ce8; font-size: 7px; text-transform: uppercase; }
+.bootstrap-questions label > small { color: var(--muted); font-size: 8px; font-weight: 400; }
+.bootstrap-questions textarea { min-height: 55px; resize: vertical; }
+.bootstrap-questions > button { justify-self: end; }
+.original-wording { display: grid; grid-template-columns: 1fr auto auto; gap: 9px; align-items: center; margin-top: 14px; padding: 10px 11px; border: 1px solid #dcd6f5; border-radius: 10px; background: #f8f6ff; cursor: pointer; }
+.original-wording > span { display: grid; gap: 4px; }
+.original-wording small { color: #7961da; font-size: 7px; letter-spacing: .1em; }
+.original-wording q { color: #514b5b; font-size: 9px; line-height: 1.4; quotes: none; }
+.original-wording input { accent-color: var(--violet); }
+.original-wording > strong { color: #6c57c4; font-size: 8px; white-space: nowrap; }
+.brief-editor { display: grid; gap: 9px; margin-top: 12px; }
+.brief-editor > div { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.brief-editor label { display: grid; gap: 5px; color: #625d68; font-size: 9px; font-weight: 650; }
+.brief-editor textarea { min-height: 54px; resize: vertical; }
+.brief-trace { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 12px; }
+.brief-trace section { min-width: 0; max-height: 126px; overflow: auto; padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: #faf9fb; }
+.brief-trace header { display: flex; align-items: center; gap: 5px; padding-bottom: 5px; border-bottom: 1px solid #ece9ee; }
+.brief-trace header > span { font-size: 7px; color: #5f9a79; }
+.brief-trace header strong { font-size: 8px; }
+.brief-trace header small { margin-left: auto; color: var(--muted); font-size: 7px; }
+.brief-trace p { display: grid; gap: 2px; margin: 7px 0 0; color: #5f5964; font-size: 7.5px; line-height: 1.4; }
+.brief-trace p em { color: #918b95; font-size: 7px; font-style: normal; }
+.brief-unknowns { display: flex; gap: 7px; margin-top: 9px; color: #8b671f; font-size: 8px; }
+.brief-unknowns span { color: #8c7960; }
+.approval-card { margin-top: 15px; padding: 16px; border: 1px solid #ded8e3; border-radius: 13px; background: linear-gradient(145deg, #fbfafc, #f5f2fb); }
+.approval-card header { display: flex; justify-content: space-between; gap: 12px; }
+.approval-card header small { color: var(--violet); font-size: 7px; letter-spacing: .12em; }
+.approval-card h4 { margin: 4px 0 0; font: 19px/1.1 Georgia, serif; }
+.approval-card header > span { align-self: flex-start; border-radius: 999px; padding: 4px 7px; background: white; color: #6e6873; font-size: 7px; }
+.approval-card > p { margin: 12px 0; color: #5e5863; font-size: 9px; line-height: 1.55; }
+.approval-card dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 0; }
+.approval-card dl > div { padding: 8px; border-radius: 8px; background: #ffffffaa; }
+.approval-card dt { color: #928c96; font-size: 7px; text-transform: uppercase; }
+.approval-card dd { margin: 3px 0 0; color: #4e4852; font-size: 8px; line-height: 1.4; }
+.approval-principles { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
+.approval-principles span { border: 1px solid #ddd7e4; border-radius: 999px; padding: 4px 7px; background: white; color: #635d68; font-size: 7px; }
+.approval-provenance { display: flex; flex-wrap: wrap; gap: 5px 12px; margin-top: 11px; color: #52705e; font-size: 8px; }
+
+@media (max-width: 700px) {
+  .bootstrap-modal { padding: 20px; }
+  .bootstrap-progress button { justify-content: center; font-size: 0; }
+  .bootstrap-choices, .brief-editor > div, .brief-trace, .approval-card dl { grid-template-columns: 1fr; }
+  .brief-trace section { max-height: 105px; }
+  .bootstrap-error { align-items: stretch; flex-direction: column; }
+  .original-wording { grid-template-columns: 1fr auto; }
+  .original-wording > strong { grid-column: 1 / -1; }
+}
+
 .account-button { height: 34px; max-width: 190px; display: flex; align-items: center; gap: 7px; border: 1px solid var(--line); background: white; border-radius: 9px; padding: 0 11px; color: #4f4c55; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .account-button > span { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #aaa5ae; }
 .account-button > span.connected { background: #56b98a; box-shadow: 0 0 0 3px #e4f5ec; }
@@ -74,6 +189,40 @@
 .account-options label button { border: 0; border-radius: 9px; padding: 0 14px; background: var(--ink); color: white; font-size: 10px; }
 .account-options label button:disabled { opacity: .4; }
 .account-options label > small { color: var(--muted); font-weight: 400; }
+
+.candidate-backdrop {
+  place-items: end center;
+  padding-bottom: 20px;
+  background: linear-gradient(180deg, transparent 58%, #16131d2e);
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+.candidate-modal {
+  width: min(760px, calc(100vw - 48px));
+  padding: 20px;
+  pointer-events: auto;
+  box-shadow: 0 22px 70px #17131e45;
+}
+
+.candidate-modal .modal-heading { padding-bottom: 14px; }
+.candidate-modal .modal-heading h2 { font-size: 24px; }
+.candidate-preview-toggle { display: inline-flex; gap: 3px; margin-top: 14px; padding: 3px; border-radius: 9px; background: #efedf1; }
+.candidate-preview-toggle button { height: 29px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: #77727e; font-size: 10px; }
+.candidate-preview-toggle button.active { background: white; color: var(--ink); box-shadow: 0 1px 4px #17131e12; }
+.candidate-checks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.candidate-checks > div { display: grid; gap: 4px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 9px; background: #faf9fb; }
+.candidate-checks strong { text-transform: capitalize; font-size: 9px; }
+.candidate-checks span { font-size: 9px; color: var(--muted); }
+.candidate-checks em { font-style: normal; font-size: 8px; }
+.candidate-checks em.improved { color: #28754e; }
+.candidate-checks em.warning { color: #9d6519; }
+.candidate-note { margin: 11px 0 0; color: var(--muted); font-size: 9px; }
+.candidate-modal .modal-actions { margin-top: 12px; }
+
+@media (max-width: 800px) {
+  .candidate-checks { grid-template-columns: 1fr; max-height: 155px; overflow: auto; }
+}
 
 /* Slide typography must scale from each 16:9 canvas, never from the monitor viewport. */
 .slide-preview { container-type: inline-size; }

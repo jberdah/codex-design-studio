@@ -50,7 +50,12 @@ try {
       };
       const parseColor = (value) => {
         const match = value.match(/rgba?\((\d+(?:\.\d+)?)[, ]+(\d+(?:\.\d+)?)[, ]+(\d+(?:\.\d+)?)(?:[, /]+(\d+(?:\.\d+)?))?\)/i);
-        return match ? { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]), a: match[4] === undefined ? 1 : Number(match[4]) } : null;
+        if (match) return { r: Number(match[1]), g: Number(match[2]), b: Number(match[3]), a: match[4] === undefined ? 1 : Number(match[4]) };
+        const srgb = value.match(/color\(srgb\s+(-?[\d.]+%?)\s+(-?[\d.]+%?)\s+(-?[\d.]+%?)(?:\s*\/\s*(-?[\d.]+%?))?\s*\)/i);
+        if (!srgb) return null;
+        const channel = (raw) => Math.min(255, Math.max(0, raw.endsWith("%") ? Number.parseFloat(raw) * 2.55 : Number.parseFloat(raw) * 255));
+        const alpha = (raw) => raw === undefined ? 1 : Math.min(1, Math.max(0, raw.endsWith("%") ? Number.parseFloat(raw) / 100 : Number.parseFloat(raw)));
+        return { r: channel(srgb[1]), g: channel(srgb[2]), b: channel(srgb[3]), a: alpha(srgb[4]) };
       };
       const background = (element) => {
         let current = element;

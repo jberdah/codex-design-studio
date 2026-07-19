@@ -14,12 +14,94 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.doUnmock("@/server/network-policy");
   if (priorDataDir === undefined) delete process.env.CODEX_STUDIO_DATA_DIR;
   else process.env.CODEX_STUDIO_DATA_DIR = priorDataDir;
   await rm(workspace, { recursive: true, force: true });
 });
 
 describe("portable source and provenance store", () => {
+  it("preserves requested reference intent and capabilities while warning about unconfirmed rights", async () => {
+    vi.doMock("@/server/network-policy", () => ({
+      assertSafeWebUrl: async (input: string) => ({ url: new URL(input), addresses: [{ address: "203.0.113.10", family: 4 }] })
+    }));
+    const { addBootstrapReferenceSite, getBootstrapReferenceState, loadProvenanceGraph, normalizeSourcePolicy } = await import("@/server/source-store");
+    expect((["extract", "inspire", "extract-and-inspire"] as const).map((intent) => normalizeSourcePolicy("url", { intent, relationship: "unknown" }).intent)).toEqual(["extract", "inspire", "extract-and-inspire"]);
+    const added = await addBootstrapReferenceSite("bootstrap-safe", {
+      url: "https://reference.example/brand",
+      intent: "extract-and-inspire",
+      role: "constraint",
+      relationship: "third-party",
+      rightsConfirmed: false,
+      permissions: { reproduceAssets: true, reproduceCopy: true, distribute: true }
+    });
+    expect(added.source).toMatchObject({
+      intent: "extract-and-inspire", role: "constraint",
+      origin: { context: "project-bootstrap" },
+      rights: { relationship: "third-party", permissions: { analyze: true, inspire: true, reproduceAssets: true, reproduceCopy: true, distribute: true } }
+    });
+    const state = getBootstrapReferenceState(await loadProvenanceGraph("bootstrap-safe"));
+    expect(state).toMatchObject({ sourceId: added.source.id, effectiveIntent: "extract-and-inspire", role: "constraint", status: "queued", runStatus: "queued", warning: { code: "reference_rights_unconfirmed" } });
+    await expect(addBootstrapReferenceSite("bootstrap-safe", { url: "https://other.example/", relationship: "owned", rightsConfirmed: true })).rejects.toThrow("one active reference website");
+  });
+
+  it("honours explicit owned-site extraction while requiring explicit copy and distribution permissions", async () => {
+    vi.doMock("@/server/network-policy", () => ({
+      assertSafeWebUrl: async (input: string) => ({ url: new URL(input), addresses: [{ address: "203.0.113.11", family: 4 }] })
+    }));
+    const { addBootstrapReferenceSite, getBootstrapReferenceState, loadProvenanceGraph } = await import("@/server/source-store");
+    const result = await addBootstrapReferenceSite("bootstrap-owned", {
+      url: "https://owned.example/",
+      intent: "extract-and-inspire",
+      role: "constraint",
+      relationship: "owned",
+      rightsConfirmed: true,
+      permissions: { reproduceAssets: true, reproduceCopy: false, distribute: true }
+    });
+    expect(result.source).toMatchObject({
+      intent: "extract-and-inspire", role: "constraint",
+      rights: { confirmed: true, relationship: "owned", permissions: { analyze: true, inspire: true, reproduceAssets: true, reproduceCopy: false, distribute: true } }
+    });
+    expect(getBootstrapReferenceState(await loadProvenanceGraph("bootstrap-owned"))?.warning).toBeUndefined();
+  });
+
+  it("exposes partial extraction with precise locators without downgrading accepted extract evidence", async () => {
+    vi.doMock("@/server/network-policy", () => ({
+      assertSafeWebUrl: async (input: string) => ({ url: new URL(input), addresses: [{ address: "203.0.113.12", family: 4 }] })
+    }));
+    const { addBootstrapReferenceSite, decideCandidate, getBootstrapReferenceState, loadProvenanceGraph, updateExtractionRun } = await import("@/server/source-store");
+    const { source, run } = await addBootstrapReferenceSite("bootstrap-partial", { url: "https://third-party.example/", intent: "extract", relationship: "unknown" });
+    await updateExtractionRun("bootstrap-partial", run.id, { status: "running", progress: 60, phase: "capturing desktop" });
+    await updateExtractionRun("bootstrap-partial", run.id, {
+      status: "succeeded", phase: "completed with partial results",
+      error: { code: "mobile_timeout", message: "The mobile viewport timed out.", recoverable: true },
+      issues: [{ code: "font_blocked", message: "A remote font was blocked.", recoverable: true }],
+      candidates: [{ kind: "color", value: { evidenceType: "computed-colors", provenance: { type: "web-capture", finalUrl: "https://third-party.example/landing", viewport: "desktop", selector: "header" }, values: ["#112233"] }, confidence: 0.82 }]
+    });
+    let graph = await loadProvenanceGraph("bootstrap-partial");
+    expect(getBootstrapReferenceState(graph)).toMatchObject({ status: "partial", runStatus: "partial", error: { code: "mobile_timeout" }, issues: [{ code: "font_blocked" }] });
+    expect(graph.candidates[0].locator).toMatchObject({ type: "web", requestedUrl: "https://third-party.example/", finalUrl: "https://third-party.example/landing", viewport: "desktop", selector: "header", sourceHash: source.contentHash });
+    await decideCandidate("bootstrap-partial", graph.candidates[0].id, "accepted");
+    graph = await loadProvenanceGraph("bootstrap-partial");
+    expect(graph.candidates[0].status).toBe("accepted");
+    expect(graph.evidence[0]).toMatchObject({ intent: "extract", directive: "advisory", locator: { type: "web", viewport: "desktop" }, rights: { permissions: { reproduceAssets: false, reproduceCopy: false, distribute: false } } });
+  });
+
+  it("exposes bootstrap source policy through the existing sources API", async () => {
+    vi.doMock("@/server/network-policy", () => ({
+      assertSafeWebUrl: async (input: string) => ({ url: new URL(input), addresses: [{ address: "203.0.113.13", family: 4 }] })
+    }));
+    const route = await import("@/app/api/sources/route");
+    const response = await route.POST(new Request("http://studio.local/api/sources?project=bootstrap-api", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: "https://reference.example/", bootstrapReference: true, intent: "extract", relationship: "third-party", rightsConfirmed: false })
+    }));
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ source: { intent: "extract", role: "evidence" }, bootstrapReference: { effectiveIntent: "extract", status: "queued", warning: { code: "reference_rights_unconfirmed" } } });
+    const fetched = await route.GET(new Request("http://studio.local/api/sources?project=bootstrap-api"));
+    expect(await fetched.json()).toMatchObject({ bootstrapReference: { effectiveIntent: "extract", runStatus: "queued", warning: { code: "reference_rights_unconfirmed" } } });
+  });
+
   it("accepts mixed sources and deduplicates identical originals by content hash", async () => {
     const { addManualEvidence, addSource, loadProvenanceGraph, queueExtraction } = await import("@/server/source-store");
     const original = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);

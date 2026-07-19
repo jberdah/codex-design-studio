@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import type { SourceIntent, SourceKind } from "@/domain/sources";
+import type { SourceIntent, SourceKind, SourcePermissions, SourceRelationship, SourceRole } from "@/domain/sources";
 import { activeProjectId } from "@/server/paths";
-import { addSource, loadProvenanceGraph } from "@/server/source-store";
+import { addBootstrapReferenceSite, addSource, getBootstrapReferenceState, loadProvenanceGraph } from "@/server/source-store";
 import { assertSafeWebUrl } from "@/server/network-policy";
 
 export const runtime = "nodejs";
@@ -9,7 +9,15 @@ export const dynamic = "force-dynamic";
 
 const sourceKinds = new Set<SourceKind>(["url", "codebase", "logo", "image", "screenshot", "document", "deck", "spreadsheet", "manual"]);
 const intents = new Set<SourceIntent>(["extract", "inspire", "extract-and-inspire"]);
+const roles = new Set<SourceRole>(["constraint", "evidence", "inspiration"]);
+const relationships = new Set<SourceRelationship>(["owned", "authorized", "third-party", "unknown"]);
 const maxSourceBytes = 100 * 1024 * 1024;
+
+function requestedPermissions(value: unknown): Partial<SourcePermissions> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const input = value as Record<string, unknown>;
+  return Object.fromEntries(["analyze", "inspire", "reproduceAssets", "reproduceCopy", "distribute"].flatMap((key) => typeof input[key] === "boolean" ? [[key, input[key]]] : [])) as Partial<SourcePermissions>;
+}
 
 function inferredKind(file: File): SourceKind {
   const name = file.name.toLowerCase();
@@ -23,7 +31,8 @@ function inferredKind(file: File): SourceKind {
 }
 
 export async function GET(request: Request) {
-  return NextResponse.json({ graph: await loadProvenanceGraph(activeProjectId(request)) });
+  const graph = await loadProvenanceGraph(activeProjectId(request));
+  return NextResponse.json({ graph, bootstrapReference: getBootstrapReferenceState(graph) });
 }
 
 export async function POST(request: Request) {
@@ -41,35 +50,51 @@ export async function POST(request: Request) {
       if (file.size > maxSourceBytes) return NextResponse.json({ error: "Sources are limited to 100 MB each." }, { status: 413 });
       const requestedKind = String(form.get("kind") ?? "");
       const requestedIntent = String(form.get("intent") ?? "extract");
+      const requestedRole = String(form.get("sourceRole") ?? "");
+      const requestedRelationship = String(form.get("relationship") ?? "");
       const result = await addSource(projectId, {
         kind: sourceKinds.has(requestedKind as SourceKind) ? requestedKind as SourceKind : inferredKind(file),
         label: String(form.get("label") ?? file.name),
         content: new Uint8Array(await file.arrayBuffer()),
         origin: { type: "upload", fileName: file.name, mediaType: file.type || "application/octet-stream" },
         intent: intents.has(requestedIntent as SourceIntent) ? requestedIntent as SourceIntent : "extract",
+        role: roles.has(requestedRole as SourceRole) ? requestedRole as SourceRole : undefined,
+        relationship: relationships.has(requestedRelationship as SourceRelationship) ? requestedRelationship as SourceRelationship : undefined,
         rightsNotes: String(form.get("rightsNotes") ?? ""),
         rightsConfirmed: form.get("rightsConfirmed") === "true"
       });
       return NextResponse.json(result, { status: result.deduplicated ? 200 : 201 });
     }
 
-    const body = await request.json() as { url?: unknown; label?: unknown; intent?: unknown; rightsNotes?: unknown; rightsConfirmed?: unknown };
+    const body = await request.json() as { url?: unknown; label?: unknown; intent?: unknown; sourceRole?: unknown; relationship?: unknown; rightsNotes?: unknown; rightsConfirmed?: unknown; permissions?: unknown; bootstrapReference?: unknown };
     if (typeof body.url !== "string") return NextResponse.json({ error: "A URL is required." }, { status: 400 });
     if (body.url.length > 8_192) return NextResponse.json({ error: "The source URL is too long." }, { status: 400 });
-    let url: URL;
-    try { url = (await assertSafeWebUrl(body.url)).url; } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Enter a safe URL." }, { status: 400 }); }
-    const canonical = url.toString();
     const intent = intents.has(body.intent as SourceIntent) ? body.intent as SourceIntent : "extract";
-    const result = await addSource(projectId, {
-      kind: "url",
-      label: typeof body.label === "string" && body.label.trim() ? body.label : url.hostname,
-      content: Buffer.from(canonical),
-      origin: { type: "url", locator: canonical, mediaType: "text/uri-list" },
-      intent,
+    const role = roles.has(body.sourceRole as SourceRole) ? body.sourceRole as SourceRole : undefined;
+    const relationship = relationships.has(body.relationship as SourceRelationship) ? body.relationship as SourceRelationship : "unknown";
+    const policy = {
+      intent, role, relationship,
       rightsNotes: typeof body.rightsNotes === "string" ? body.rightsNotes : "",
-      rightsConfirmed: body.rightsConfirmed === true
-    });
-    return NextResponse.json(result, { status: result.deduplicated ? 200 : 201 });
+      rightsConfirmed: body.rightsConfirmed === true,
+      permissions: requestedPermissions(body.permissions)
+    };
+    let result;
+    if (body.bootstrapReference === true) {
+      result = await addBootstrapReferenceSite(projectId, { url: body.url, label: typeof body.label === "string" ? body.label : undefined, ...policy });
+    } else {
+      let url: URL;
+      try { url = (await assertSafeWebUrl(body.url)).url; } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Enter a safe URL." }, { status: 400 }); }
+      const canonical = url.toString();
+      result = await addSource(projectId, {
+        kind: "url",
+        label: typeof body.label === "string" && body.label.trim() ? body.label : url.hostname,
+        content: Buffer.from(canonical),
+        origin: { type: "url", locator: canonical, mediaType: "text/uri-list" },
+        ...policy
+      });
+    }
+    const graph = body.bootstrapReference === true ? await loadProvenanceGraph(projectId) : undefined;
+    return NextResponse.json({ ...result, ...(graph ? { bootstrapReference: getBootstrapReferenceState(graph) } : {}) }, { status: result.deduplicated ? 200 : 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not add source." }, { status: 400 });
   }

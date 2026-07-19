@@ -66,4 +66,23 @@ describe("deterministic rendered Web audit", () => {
     }
     expect(report.summary.errors).toBe(0);
   });
+
+  it("measures CSS Color 4 srgb colors conclusively", async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "studio-visual-srgb-"));
+    directories.push(root);
+    const web = path.join(root, "web");
+    await mkdir(web);
+    const file = path.join(web, "index.html");
+    await writeFile(file, `<!doctype html><html><head><style>
+      body{margin:0;background:color(srgb 1 1 1);color:color(srgb .8 .8 .8)} main{min-height:100vh}
+    </style></head><body><header></header><main><h1>Low contrast heading</h1></main><footer></footer></body></html>`, "utf8");
+    const script = path.join(process.cwd(), "skills", "web-art-director", "scripts", "visual-check.mjs");
+    const { stdout } = await execute(process.execPath, [script, "--file", file, "--phase", "before"], { cwd: root, timeout: 60_000, maxBuffer: 5_000_000 });
+    const report = JSON.parse(stdout.trim()) as WebVisualCheckReport;
+
+    for (const render of Object.values(report.renders)) {
+      expect(render.contrast.some((item) => item.conclusive && typeof item.ratio === "number")).toBe(true);
+      expect(render.contrast.some((item) => item.reason === "foreground color syntax is not supported")).toBe(false);
+    }
+  });
 });

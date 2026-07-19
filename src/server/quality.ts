@@ -13,6 +13,7 @@ import type {
   StructuralInvariant,
   StructuredCritiqueFinding,
   VersionedReview,
+  WebRenderAudit,
   WebVisualCheckReport
 } from "@/domain/quality";
 import { loadArtifactVersion } from "./artifacts";
@@ -252,14 +253,71 @@ export function assessWebMutation(input: { beforeSource: string; afterSource: st
   const sourceChanged = hashBytes(input.beforeSource) !== hashBytes(input.afterSource);
   const renderDifferences = Object.values(input.report.renders).map((render) => render.pixelDifference).filter((value): value is number => typeof value === "number");
   const renderedChanged = renderDifferences.some((difference) => difference > 0);
-  const magnitude = (evidence: unknown) => Array.isArray(evidence) ? evidence.length : evidence && typeof evidence === "object" ? Object.keys(evidence).length : 1;
-  const priorErrors = new Map(Object.values(input.beforeReport?.renders ?? {}).flatMap((render) => render.findings.filter((finding) => finding.status === "error").map((finding) => [finding.id, magnitude(finding.evidence)] as const)));
-  const deterministicErrors = Object.values(input.report.renders).flatMap((render) => render.findings.filter((finding) => finding.status === "error" && (!priorErrors.has(finding.id) || magnitude(finding.evidence) > (priorErrors.get(finding.id) ?? 0))));
+  const contrastMetrics = (render: WebRenderAudit) => {
+    const failures = render.contrast.filter((item) => item.conclusive && typeof item.ratio === "number" && item.ratio < item.required);
+    return {
+      failures: failures.length,
+      deficit: Number(failures.reduce((total, item) => total + Math.max(0, item.required - (item.ratio ?? item.required)), 0).toFixed(2)),
+      worstRatio: failures.length ? Math.min(...failures.map((item) => item.ratio!)) : null,
+      inconclusive: render.contrast.filter((item) => !item.conclusive).length
+    };
+  };
+  const integrityMetrics = (render: WebRenderAudit) => ({
+    overflow: Number(render.horizontalOverflow),
+    clipping: render.clippedElements.length,
+    assets: render.brokenAssets.length,
+    landmarks: Number(render.landmarks.main !== 1) + Number(render.landmarks.h1 !== 1),
+    focusWarnings: render.focusOrder.positiveTabIndexes.length + render.focusOrder.duplicateLandmarks.length,
+    unlabeledNavigation: render.landmarks.unlabeledNavigation
+  });
+  const deterministicErrors: WebRenderAudit["findings"] = [];
+  const reviewWarnings: WebRenderAudit["findings"] = [];
+  const comparisons: Record<string, {
+    before: ReturnType<typeof contrastMetrics> & ReturnType<typeof integrityMetrics>;
+    after: ReturnType<typeof contrastMetrics> & ReturnType<typeof integrityMetrics>;
+    regressions: string[];
+    warnings: string[];
+  }> = {};
+  for (const [viewport, after] of Object.entries(input.report.renders)) {
+    const before = input.beforeReport?.renders[viewport];
+    if (!before) {
+      deterministicErrors.push(...after.findings.filter((finding) => finding.status === "error"));
+      reviewWarnings.push(...after.findings.filter((finding) => finding.status === "warning"));
+      continue;
+    }
+    const beforeContrast = contrastMetrics(before);
+    const afterContrast = contrastMetrics(after);
+    const beforeIntegrity = integrityMetrics(before);
+    const afterIntegrity = integrityMetrics(after);
+    const regressions: string[] = [];
+    const warnings: string[] = [];
+    if (afterContrast.failures > beforeContrast.failures || (afterContrast.failures === beforeContrast.failures && afterContrast.deficit > beforeContrast.deficit + 0.05)) regressions.push("contrast");
+    for (const key of ["overflow", "clipping", "assets", "landmarks"] as const) {
+      if (afterIntegrity[key] > beforeIntegrity[key]) regressions.push(key);
+    }
+    if (afterContrast.inconclusive > beforeContrast.inconclusive) warnings.push("contrast measurement");
+    if (afterIntegrity.focusWarnings > beforeIntegrity.focusWarnings) warnings.push("focus order");
+    if (afterIntegrity.unlabeledNavigation > beforeIntegrity.unlabeledNavigation) warnings.push("navigation labels");
+    const known = new Set(["contrast", "overflow", "clipping", "assets", "landmarks"]);
+    for (const finding of after.findings.filter((item) => item.status === "error")) {
+      const category = finding.id.split(":").at(-1) ?? finding.id;
+      const prior = before.findings.find((item) => item.id === finding.id);
+      if ((known.has(category) && regressions.includes(category)) || (!known.has(category) && prior?.status !== "error")) deterministicErrors.push(finding);
+    }
+    for (const finding of after.findings.filter((item) => item.status === "warning")) {
+      const category = finding.id.split(":").at(-1) ?? finding.id;
+      const prior = before.findings.find((item) => item.id === finding.id);
+      const knownWarning = category === "contrast" ? warnings.includes("contrast measurement") : category === "focus-order" ? warnings.includes("focus order") : category === "landmarks" ? warnings.includes("navigation labels") : false;
+      if (knownWarning || (!["contrast", "focus-order", "landmarks"].includes(category) && prior?.status !== "warning")) reviewWarnings.push(finding);
+    }
+    comparisons[viewport] = { before: { ...beforeContrast, ...beforeIntegrity }, after: { ...afterContrast, ...afterIntegrity }, regressions, warnings };
+  }
   const reasons: string[] = [];
   if (input.claimedChanged && !sourceChanged) reasons.push("The agent claimed a change but the source hash is unchanged.");
   if (input.claimedChanged && !renderedChanged) reasons.push("The source changed but no rendered pixel change was measured.");
-  if (deterministicErrors.length) reasons.push(`${deterministicErrors.length} deterministic rendered check(s) failed.`);
-  return { accepted: reasons.length === 0, sourceChanged, renderedChanged, deterministicErrors, reasons };
+  if (deterministicErrors.length) reasons.push(`${deterministicErrors.length} deterministic rendered regression(s) require review.`);
+  const hasMetricWarnings = Object.values(comparisons).some((comparison) => comparison.warnings.length > 0);
+  return { accepted: reasons.length === 0, requiresUserDecision: deterministicErrors.length > 0 || reviewWarnings.length > 0 || hasMetricWarnings, sourceChanged, renderedChanged, deterministicErrors, reviewWarnings, comparisons, reasons };
 }
 
 /** Runs a single-file artifact mutation and restores the exact prior bytes on rejection or error. */
