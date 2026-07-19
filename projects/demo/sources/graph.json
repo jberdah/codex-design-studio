@@ -1,0 +1,368 @@
+{
+  "audit": [
+    {
+      "action": "source.added",
+      "at": "2026-07-19T21:48:38.644Z",
+      "detail": {
+        "contentHash": "79d8420028c72e607f43b4dbccfb813a4dccf1d99040c3257bada4f2be394364",
+        "kind": "manual"
+      },
+      "id": "audit_9de8cae0-577d-4116-b3a0-ee6beb0cffe6",
+      "sourceId": "src_79d8420028c72e607f43"
+    },
+    {
+      "action": "run.queued",
+      "at": "2026-07-19T21:48:38.644Z",
+      "detail": {
+        "attempt": 1,
+        "reason": "initial"
+      },
+      "id": "audit_cac9416f-8346-4a9d-88b1-f0461a3dc7c9",
+      "runId": "run_3f8237c9-f432-4275-a5b3-999ba60f7b9f",
+      "sourceId": "src_79d8420028c72e607f43"
+    },
+    {
+      "action": "evidence.added",
+      "at": "2026-07-19T21:48:38.702Z",
+      "detail": {
+        "directive": "must-use",
+        "evidenceId": "ev_c849c35d192a0b686637",
+        "kind": "color"
+      },
+      "id": "audit_2c7e808d-a3c0-46a6-a7eb-e1595b508980",
+      "sourceId": "src_79d8420028c72e607f43"
+    },
+    {
+      "action": "run.succeeded",
+      "at": "2026-07-19T21:48:38.702Z",
+      "detail": {
+        "phase": "manual evidence recorded"
+      },
+      "id": "audit_68e60fbf-df4c-4462-8f70-fb6f0c1df726",
+      "runId": "run_3f8237c9-f432-4275-a5b3-999ba60f7b9f",
+      "sourceId": "src_79d8420028c72e607f43"
+    },
+    {
+      "action": "source.added",
+      "at": "2026-07-19T21:48:38.786Z",
+      "detail": {
+        "contentHash": "658c9aab40e73f52f7a2e5700a83556cf8cc1d925474bb0f2adeeebc4cb1b20b",
+        "kind": "manual"
+      },
+      "id": "audit_e240f784-3f35-4fe0-ab9c-0f8a62b244a5",
+      "sourceId": "src_658c9aab40e73f52f7a2"
+    },
+    {
+      "action": "run.queued",
+      "at": "2026-07-19T21:48:38.787Z",
+      "detail": {
+        "attempt": 1,
+        "reason": "initial"
+      },
+      "id": "audit_7da63297-1e29-4db6-9870-e00314a227f8",
+      "runId": "run_375b4432-ac73-480d-b7be-d95add1d8475",
+      "sourceId": "src_658c9aab40e73f52f7a2"
+    },
+    {
+      "action": "evidence.added",
+      "at": "2026-07-19T21:48:38.840Z",
+      "detail": {
+        "directive": "must-avoid",
+        "evidenceId": "ev_8ca94680b57c380c643b",
+        "kind": "tone"
+      },
+      "id": "audit_6cf8d666-6444-4b87-ba2a-befb7adc67f5",
+      "sourceId": "src_658c9aab40e73f52f7a2"
+    },
+    {
+      "action": "run.succeeded",
+      "at": "2026-07-19T21:48:38.840Z",
+      "detail": {
+        "phase": "manual evidence recorded"
+      },
+      "id": "audit_823994c9-c87d-4267-97b7-533b79673730",
+      "runId": "run_375b4432-ac73-480d-b7be-d95add1d8475",
+      "sourceId": "src_658c9aab40e73f52f7a2"
+    },
+    {
+      "action": "run.queued",
+      "at": "2026-07-19T21:48:38.911Z",
+      "detail": {
+        "attempt": 1,
+        "reason": "initial"
+      },
+      "id": "audit_19218845-df55-4dd7-a1db-921dfb386a8c",
+      "runId": "run_42e6ec34-85f5-4c7a-a2b3-d631d0195372",
+      "sourceId": "src_fb6dd0ca1d5eb31e955a"
+    },
+    {
+      "action": "source.added",
+      "at": "2026-07-19T21:48:38.911Z",
+      "detail": {
+        "contentHash": "fb6dd0ca1d5eb31e955aaedb2dc04da8e04c65d934f662af9f0cfdd43ec6339f",
+        "kind": "manual"
+      },
+      "id": "audit_8b574458-0062-425f-a15b-2d8dcc81adf4",
+      "sourceId": "src_fb6dd0ca1d5eb31e955a"
+    },
+    {
+      "action": "run.succeeded",
+      "at": "2026-07-19T21:48:38.954Z",
+      "detail": {
+        "phase": "manual evidence recorded"
+      },
+      "id": "audit_d2d0117c-dd47-4c90-8e22-85b09055ff4d",
+      "runId": "run_42e6ec34-85f5-4c7a-a2b3-d631d0195372",
+      "sourceId": "src_fb6dd0ca1d5eb31e955a"
+    },
+    {
+      "action": "evidence.added",
+      "at": "2026-07-19T21:48:38.954Z",
+      "detail": {
+        "directive": "must-use",
+        "evidenceId": "ev_da6ddbeb315bcfc11813",
+        "kind": "accessibility"
+      },
+      "id": "audit_d530e54b-2298-45d4-841b-bdbcba592b67",
+      "sourceId": "src_fb6dd0ca1d5eb31e955a"
+    }
+  ],
+  "candidates": [],
+  "evidence": [
+    {
+      "confidence": {
+        "method": "manual",
+        "score": 1
+      },
+      "contentHash": "658c9aab40e73f52f7a2e5700a83556cf8cc1d925474bb0f2adeeebc4cb1b20b",
+      "createdAt": "2026-07-19T21:48:38.839Z",
+      "directive": "must-avoid",
+      "id": "ev_8ca94680b57c380c643b",
+      "intent": "extract",
+      "kind": "tone",
+      "locator": {
+        "field": "tone",
+        "sourceHash": "658c9aab40e73f52f7a2e5700a83556cf8cc1d925474bb0f2adeeebc4cb1b20b",
+        "type": "manual"
+      },
+      "rights": {
+        "confirmed": true,
+        "notes": "Editorial rule authored by the brand owner.",
+        "permissions": {
+          "analyze": true,
+          "distribute": false,
+          "inspire": false,
+          "reproduceAssets": false,
+          "reproduceCopy": false
+        },
+        "relationship": "owned"
+      },
+      "rightsNotes": "Editorial rule authored by the brand owner.",
+      "sourceId": "src_658c9aab40e73f52f7a2",
+      "value": "Voice stays precise and evidence-led; never use the forbidden patterns 'game-changing' or 'revolutionary'."
+    },
+    {
+      "confidence": {
+        "method": "manual",
+        "score": 1
+      },
+      "contentHash": "79d8420028c72e607f43b4dbccfb813a4dccf1d99040c3257bada4f2be394364",
+      "createdAt": "2026-07-19T21:48:38.702Z",
+      "directive": "must-use",
+      "id": "ev_c849c35d192a0b686637",
+      "intent": "extract",
+      "kind": "color",
+      "locator": {
+        "field": "color",
+        "sourceHash": "79d8420028c72e607f43b4dbccfb813a4dccf1d99040c3257bada4f2be394364",
+        "type": "manual"
+      },
+      "rights": {
+        "confirmed": true,
+        "notes": "Brand palette owned by the Asteria demo project.",
+        "permissions": {
+          "analyze": true,
+          "distribute": false,
+          "inspire": false,
+          "reproduceAssets": false,
+          "reproduceCopy": false
+        },
+        "relationship": "owned"
+      },
+      "rightsNotes": "Brand palette owned by the Asteria demo project.",
+      "sourceId": "src_79d8420028c72e607f43",
+      "value": "#1C3D38 is the Asteria primary; reserve #D8FF72 lime strictly for accents on dark or neutral surfaces."
+    },
+    {
+      "confidence": {
+        "method": "manual",
+        "score": 1
+      },
+      "contentHash": "fb6dd0ca1d5eb31e955aaedb2dc04da8e04c65d934f662af9f0cfdd43ec6339f",
+      "createdAt": "2026-07-19T21:48:38.954Z",
+      "directive": "must-use",
+      "id": "ev_da6ddbeb315bcfc11813",
+      "intent": "extract",
+      "kind": "accessibility",
+      "locator": {
+        "field": "accessibility",
+        "sourceHash": "fb6dd0ca1d5eb31e955aaedb2dc04da8e04c65d934f662af9f0cfdd43ec6339f",
+        "type": "manual"
+      },
+      "rights": {
+        "confirmed": true,
+        "notes": "Accessibility constraint set by the design owner.",
+        "permissions": {
+          "analyze": true,
+          "distribute": false,
+          "inspire": false,
+          "reproduceAssets": false,
+          "reproduceCopy": false
+        },
+        "relationship": "owned"
+      },
+      "rightsNotes": "Accessibility constraint set by the design owner.",
+      "sourceId": "src_fb6dd0ca1d5eb31e955a",
+      "value": "All body copy must meet WCAG AA contrast against the parchment background (#F3F1E9)."
+    }
+  ],
+  "extractionRuns": [
+    {
+      "attempt": 1,
+      "candidateIds": [],
+      "finishedAt": "2026-07-19T21:48:38.839Z",
+      "id": "run_375b4432-ac73-480d-b7be-d95add1d8475",
+      "phase": "manual evidence recorded",
+      "progress": 100,
+      "requestedAt": "2026-07-19T21:48:38.787Z",
+      "sourceId": "src_658c9aab40e73f52f7a2",
+      "startedAt": "2026-07-19T21:48:38.839Z",
+      "status": "succeeded"
+    },
+    {
+      "attempt": 1,
+      "candidateIds": [],
+      "finishedAt": "2026-07-19T21:48:38.702Z",
+      "id": "run_3f8237c9-f432-4275-a5b3-999ba60f7b9f",
+      "phase": "manual evidence recorded",
+      "progress": 100,
+      "requestedAt": "2026-07-19T21:48:38.644Z",
+      "sourceId": "src_79d8420028c72e607f43",
+      "startedAt": "2026-07-19T21:48:38.702Z",
+      "status": "succeeded"
+    },
+    {
+      "attempt": 1,
+      "candidateIds": [],
+      "finishedAt": "2026-07-19T21:48:38.954Z",
+      "id": "run_42e6ec34-85f5-4c7a-a2b3-d631d0195372",
+      "phase": "manual evidence recorded",
+      "progress": 100,
+      "requestedAt": "2026-07-19T21:48:38.911Z",
+      "sourceId": "src_fb6dd0ca1d5eb31e955a",
+      "startedAt": "2026-07-19T21:48:38.954Z",
+      "status": "succeeded"
+    }
+  ],
+  "projectId": "demo",
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "contentHash": "658c9aab40e73f52f7a2e5700a83556cf8cc1d925474bb0f2adeeebc4cb1b20b",
+      "createdAt": "2026-07-19T21:48:38.786Z",
+      "id": "src_658c9aab40e73f52f7a2",
+      "intent": "extract",
+      "kind": "manual",
+      "label": "Manual tone",
+      "latestRunId": "run_375b4432-ac73-480d-b7be-d95add1d8475",
+      "origin": {
+        "importedAt": "2026-07-19T21:48:38.786Z",
+        "type": "manual"
+      },
+      "rights": {
+        "confirmed": true,
+        "notes": "Editorial rule authored by the brand owner.",
+        "permissions": {
+          "analyze": true,
+          "distribute": false,
+          "inspire": false,
+          "reproduceAssets": false,
+          "reproduceCopy": false
+        },
+        "relationship": "owned"
+      },
+      "role": "constraint",
+      "status": "ready",
+      "storage": {
+        "blobPath": "sources/blobs/658c9aab40e73f52f7a2e5700a83556cf8cc1d925474bb0f2adeeebc4cb1b20b",
+        "byteLength": 176
+      },
+      "updatedAt": "2026-07-19T21:48:38.787Z"
+    },
+    {
+      "contentHash": "79d8420028c72e607f43b4dbccfb813a4dccf1d99040c3257bada4f2be394364",
+      "createdAt": "2026-07-19T21:48:38.643Z",
+      "id": "src_79d8420028c72e607f43",
+      "intent": "extract",
+      "kind": "manual",
+      "label": "Manual color",
+      "latestRunId": "run_3f8237c9-f432-4275-a5b3-999ba60f7b9f",
+      "origin": {
+        "importedAt": "2026-07-19T21:48:38.643Z",
+        "type": "manual"
+      },
+      "rights": {
+        "confirmed": true,
+        "notes": "Brand palette owned by the Asteria demo project.",
+        "permissions": {
+          "analyze": true,
+          "distribute": false,
+          "inspire": false,
+          "reproduceAssets": false,
+          "reproduceCopy": false
+        },
+        "relationship": "owned"
+      },
+      "role": "constraint",
+      "status": "ready",
+      "storage": {
+        "blobPath": "sources/blobs/79d8420028c72e607f43b4dbccfb813a4dccf1d99040c3257bada4f2be394364",
+        "byteLength": 171
+      },
+      "updatedAt": "2026-07-19T21:48:38.644Z"
+    },
+    {
+      "contentHash": "fb6dd0ca1d5eb31e955aaedb2dc04da8e04c65d934f662af9f0cfdd43ec6339f",
+      "createdAt": "2026-07-19T21:48:38.911Z",
+      "id": "src_fb6dd0ca1d5eb31e955a",
+      "intent": "extract",
+      "kind": "manual",
+      "label": "Manual accessibility",
+      "latestRunId": "run_42e6ec34-85f5-4c7a-a2b3-d631d0195372",
+      "origin": {
+        "importedAt": "2026-07-19T21:48:38.911Z",
+        "type": "manual"
+      },
+      "rights": {
+        "confirmed": true,
+        "notes": "Accessibility constraint set by the design owner.",
+        "permissions": {
+          "analyze": true,
+          "distribute": false,
+          "inspire": false,
+          "reproduceAssets": false,
+          "reproduceCopy": false
+        },
+        "relationship": "owned"
+      },
+      "role": "constraint",
+      "status": "ready",
+      "storage": {
+        "blobPath": "sources/blobs/fb6dd0ca1d5eb31e955aaedb2dc04da8e04c65d934f662af9f0cfdd43ec6339f",
+        "byteLength": 161
+      },
+      "updatedAt": "2026-07-19T21:48:38.911Z"
+    }
+  ],
+  "updatedAt": "2026-07-19T21:48:38.954Z"
+}
