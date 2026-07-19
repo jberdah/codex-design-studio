@@ -84,7 +84,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: codex-design-studio-${{ matrix.platform }}-${{ matrix.arch }}
-          path: out/make/**
+          path: out/release/*
           if-no-files-found: error
           retention-days: 7
 

@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
 const architecture = process.argv.find((value) => value.startsWith("--arch="))?.slice(7) || process.arch;
 const makeRoot = path.join(root, "out", "make");
+const releaseRoot = path.join(root, "out", "release");
 const platform = process.platform;
 
 async function filesBelow(directory) {
@@ -25,9 +26,28 @@ async function digest(file) {
   return hash.digest("hex");
 }
 
-const files = (await filesBelow(makeRoot)).sort();
+await rm(releaseRoot, { recursive: true, force: true });
+await mkdir(releaseRoot, { recursive: true });
+
+function releaseName(file) {
+  const name = path.basename(file);
+  if (name === "Setup.exe") return `Codex-Design-Studio-${platform}-${architecture}-Setup.exe`;
+  if (name === "RELEASES") return `RELEASES-${platform}-${architecture}`;
+  return name;
+}
+
+const sourceFiles = (await filesBelow(makeRoot)).sort();
+const names = new Set();
+for (const source of sourceFiles) {
+  const name = releaseName(source);
+  if (names.has(name)) throw new Error(`Release asset name collision: ${name}`);
+  names.add(name);
+  await copyFile(source, path.join(releaseRoot, name));
+}
+
+const files = (await filesBelow(releaseRoot)).sort();
 const lines = [];
-for (const file of files) lines.push(`${await digest(file)}  ${path.relative(makeRoot, file).split(path.sep).join("/")}`);
-const destination = path.join(makeRoot, `SHA256SUMS-${platform}-${architecture}.txt`);
+for (const file of files) lines.push(`${await digest(file)}  ${path.basename(file)}`);
+const destination = path.join(releaseRoot, `SHA256SUMS-${platform}-${architecture}.txt`);
 await writeFile(destination, `${lines.join("\n")}\n`);
-console.log(`Created ${destination}`);
+console.log(`Staged ${files.length} release asset(s) and created ${destination}`);
