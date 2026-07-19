@@ -1,6 +1,18 @@
 name: Native desktop release
 
 on:
+  pull_request:
+    branches: [master]
+    paths:
+      - ".github/workflows/release.yml"
+      - "desktop/**"
+      - "scripts/prepare-standalone.mjs"
+      - "scripts/test-packaged-electron.mjs"
+      - "scripts/verify-packaged-runtime.mjs"
+      - "forge.config.cjs"
+      - "next.config.ts"
+      - "package.json"
+      - "package-lock.json"
   workflow_dispatch:
     inputs:
       release_tag:
