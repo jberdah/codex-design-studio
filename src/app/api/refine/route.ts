@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { SelectionContext } from "@/domain/types";
+import { readJsonBody } from "@/server/http";
 import { runCodexRefinement, runCodexWebRefinement } from "@/server/codex-client";
 import { applyProjectPatch, fallbackRefinement } from "@/server/refine";
 import { loadLandingHtml, loadProject, saveProject, saveProjectManifest, writeLandingHtml } from "@/server/store";
@@ -9,10 +10,16 @@ import { assessWebMutation, runFileRollbackTransaction } from "@/server/quality"
 import { createWebRefinementCandidate } from "@/server/web-candidates";
 
 export const runtime = "nodejs";
-export const maxDuration = 300;
+// The web branch runs sequentially: before-render (≤120s, visual.ts) + Codex
+// turn (≤180s, codex-client.ts) + after-render (≤120s). The declared budget
+// must exceed that worst case, otherwise a hosted platform could kill the
+// request mid-transaction and skip the rollback that preserves index.html.
+export const maxDuration = 600;
 
 export async function POST(request: Request) {
-  const { instruction, selection, deliverable, mode = "auto" } = await request.json() as { instruction?: unknown; selection?: SelectionContext; deliverable?: "brand" | "system" | "web" | "slides"; mode?: "auto" | "codex" | "fallback" };
+  const body = await readJsonBody<{ instruction?: unknown; selection?: SelectionContext; deliverable?: "brand" | "system" | "web" | "slides"; mode?: "auto" | "codex" | "fallback" }>(request);
+  if (!body) return NextResponse.json({ error: "A valid JSON request body is required." }, { status: 400 });
+  const { instruction, selection, deliverable, mode = "auto" } = body;
   if (typeof instruction !== "string" || !instruction.trim()) return NextResponse.json({ error: "An instruction is required." }, { status: 400 });
   if (instruction.length > 2_000) return NextResponse.json({ error: "The instruction is too long." }, { status: 400 });
   if (!(["auto", "codex", "fallback"] as const).includes(mode)) return NextResponse.json({ error: "Unknown refinement mode." }, { status: 400 });

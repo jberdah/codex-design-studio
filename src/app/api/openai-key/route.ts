@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { readJsonBody } from "@/server/http";
 import { MacOSOpenAIKeychain } from "@/server/openai-keychain";
 
 export const runtime = "nodejs";
@@ -10,8 +11,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = await request.json() as { apiKey?: unknown };
-  if (typeof body.apiKey !== "string") return NextResponse.json({ error: "A Platform API key is required." }, { status: 400 });
+  const body = await readJsonBody<{ apiKey?: unknown }>(request);
+  if (!body || typeof body.apiKey !== "string") return NextResponse.json({ error: "A Platform API key is required." }, { status: 400 });
   try { await new MacOSOpenAIKeychain().setApiKey(body.apiKey); return NextResponse.json({ configured: true }); }
   catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not store the Platform API key." }, { status: 409 }); }
 }
