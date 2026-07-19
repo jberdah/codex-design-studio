@@ -23,7 +23,9 @@ jobs:
       matrix:
         # The product targets macOS Apple Silicon, macOS Intel, and Windows;
         # the suite must stay green on every runtime judges can use.
-        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
+        # macos-15-intel matches the release matrix; macos-13 is being retired
+        # and its runner queue is unreliable.
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
 
     steps:
       - name: Check out repository
