@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { defaultProject } from "@/domain/defaults";
 import type { ProjectData, ProjectSummary } from "@/domain/types";
 import { safeProjectPath, safeProjectRoot, safeProjectsRoot } from "./paths";
@@ -67,6 +67,36 @@ export async function loadLandingHtml(projectId = "demo") {
 export async function writeLandingHtml(projectId: string, html: string) {
   await ensureProject(projectId);
   await writeFile(await safeProjectPath(projectId, "web", "index.html"), html, "utf8");
+}
+
+export async function activateCustomLanding(projectId: string, input: {
+  expectedProjectVersion: number;
+  expectedSourceHash: string;
+  html: string;
+  summary: string;
+  threadId?: string;
+}) {
+  await ensureProject(projectId);
+  return serializeProject(projectId, async () => {
+    const manifest = await safeProjectPath(projectId, "project.json");
+    const landing = await safeProjectPath(projectId, "web", "index.html");
+    const project = JSON.parse(await readFile(manifest, "utf8")) as ProjectData;
+    if (project.version !== input.expectedProjectVersion) throw new Error(`This candidate is stale because the project advanced from version ${input.expectedProjectVersion} to ${project.version}.`);
+    const originalHtml = await readFile(landing, "utf8");
+    const currentHash = createHash("sha256").update(originalHtml).digest("hex");
+    if (currentHash !== input.expectedSourceHash) throw new Error("This candidate is stale because the active Web source changed.");
+    try {
+      await writeFile(landing, input.html, "utf8");
+      project.version += 1;
+      project.lastSummary = input.summary;
+      project.webCustomized = true;
+      if (input.threadId) project.threadId = input.threadId;
+      return await saveProjectFiles(project, { renderWeb: false });
+    } catch (error) {
+      await writeFile(landing, originalHtml);
+      throw error;
+    }
+  });
 }
 
 export async function saveProjectManifest(project: ProjectData, touch = true) {
@@ -153,7 +183,8 @@ export async function listProjects(): Promise<ProjectSummary[]> {
   const root = await safeProjectsRoot();
   await mkdir(root, { recursive: true });
   const entries = await readdir(root, { withFileTypes: true });
-  const projects = await Promise.all(entries.filter((entry) => entry.isDirectory()).map(async (entry) => {
+  const hiddenBootstrapProject = /^bootstrap-(?:(?:approved|finalizing)-)?[a-f0-9]{24}$/;
+  const projects = await Promise.all(entries.filter((entry) => entry.isDirectory() && !hiddenBootstrapProject.test(entry.name)).map(async (entry) => {
     try {
       const project = JSON.parse(await readFile(await safeProjectPath(entry.name, "project.json"), "utf8")) as ProjectData;
       return { id: project.id, name: project.name, brandName: project.brand.name, industry: project.brand.industry, updatedAt: project.updatedAt, version: project.version } satisfies ProjectSummary;

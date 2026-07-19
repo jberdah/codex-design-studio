@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
+import type { LookupFunction } from "node:net";
 import { chromium, type Browser, type Page, type Response } from "playwright";
 import {
   DEFAULT_CAPTURE_LIMITS,
@@ -44,12 +45,24 @@ export function isCaptureMethodAllowed(method: string) {
 }
 
 interface PinnedResponse { status: number; headers: Record<string, string>; body: Buffer; }
+
+/** Keeps every request pinned to the address that passed the SSRF policy check. */
+export function pinnedLookup(address: string): LookupFunction {
+  const family = address.includes(":") ? 6 : 4;
+  return (_hostname, options, callback) => {
+    // Node asks custom resolvers for an array when `all` is enabled. Returning
+    // the scalar callback shape in that case leaves the selected IP undefined.
+    if (options.all) callback(null, [{ address, family }]);
+    else callback(null, address, family);
+  };
+}
+
 async function fetchPinned(url: URL, address: string, method: string, headers: Record<string, string>, postData: Buffer | null, maxBytes: number, timeoutMs: number): Promise<PinnedResponse> {
   return new Promise((resolve, reject) => {
     const transport = url.protocol === "https:" ? https : http;
     const request = transport.request(url, {
       method, headers: { ...headers, host: url.host, "accept-encoding": "identity", connection: "close" },
-      lookup: (_hostname, _options, callback) => callback(null, address, address.includes(":") ? 6 : 4),
+      lookup: pinnedLookup(address),
       ...(url.protocol === "https:" ? { servername: url.hostname } : {})
     }, (response) => {
       const chunks: Buffer[] = []; let bytes = 0;

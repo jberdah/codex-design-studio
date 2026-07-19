@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectData, ProjectSummary, ReviewReport, SelectionContext } from "@/domain/types";
 import type { SlideDocument } from "@/domain/artifacts";
+import type { BootstrapSession, StrategicCreativeBriefVersion as BootstrapBriefVersion } from "@/domain/bootstrap";
 import { projectSlideDocument, projectWithSlideDocument } from "@/domain/slide-editing";
 import type { EvidenceDirective, EvidenceKind, ProvenanceGraph, SourceIntent, SourceKind } from "@/domain/sources";
 import type { ArtifactKind, BrandSystemRegistry, ReconciliationAction, ReconciliationReview } from "@/domain/brand-system";
@@ -13,6 +14,90 @@ import { ArtifactCanvasEditor } from "./ArtifactCanvasEditor";
 type Surface = "sources" | "reconcile" | "brand" | "system" | "assets" | "web" | "slides";
 type ApiProject = { project: ProjectData; landingHtml: string };
 type AccountState = { account: null | { type: "apiKey" } | { type: "chatgpt"; email: string | null; planType: string }; requiresOpenaiAuth: boolean };
+type PendingWebCandidate = {
+  id: string;
+  summary: string;
+  assessment: {
+    reasons: string[];
+    comparisons: Record<string, { before: { failures: number; inconclusive: number }; after: { failures: number; inconclusive: number }; regressions: string[]; warnings?: string[] }>;
+  };
+};
+type BootstrapStep = 1 | 2 | 3 | 4;
+type BootstrapDeliverable = "web" | "slides";
+type BootstrapInput = {
+  brandName: string;
+  objective: string;
+  audience: string;
+  deliverable: BootstrapDeliverable;
+  referenceUrl: string;
+  referenceIntent: "extract" | "inspire";
+  lockOriginal: boolean;
+};
+
+const emptyBootstrap: BootstrapInput = {
+  brandName: "",
+  objective: "",
+  audience: "",
+  deliverable: "web",
+  referenceUrl: "",
+  referenceIntent: "extract",
+  lockOriginal: false
+};
+
+function activeBootstrapBrief(session: BootstrapSession) {
+  return session.briefs.find((brief) => brief.version === session.activeBriefVersion) ?? session.briefs.at(-1);
+}
+
+function manualCreativeBrief(input: BootstrapInput): BootstrapBriefVersion {
+  const audience = input.audience.trim() || "an audience still to be clarified";
+  const medium = input.deliverable === "web" ? "focused Web experience" : "clear presentation narrative";
+  const objective = `${input.brandName.trim()} should turn its stated ambition into a ${medium} that helps ${audience} understand why it matters and what to do next.`;
+  return {
+    id: "manual-bootstrap-brief",
+    version: 1,
+    status: "draft",
+    createdAt: new Date().toISOString(),
+    createdBy: "user",
+    title: `${input.brandName.trim()} creative brief`,
+    summary: objective,
+    facts: [
+      { id: "manual-brand-name", claim: `The brand name is ${input.brandName.trim()}.`, evidenceIds: [] },
+      { id: "manual-original-objective", claim: `The creator's original wording is: “${input.objective.trim()}”`, evidenceIds: [] },
+      { id: "manual-deliverable", claim: `The first deliverable is ${input.deliverable === "web" ? "Web" : "Slides"}.`, evidenceIds: [] }
+    ],
+    inferences: [{ id: "manual-clarity", claim: "The first direction should prioritize a clear hierarchy and a decisive next action.", evidenceIds: [], confidence: 0.55 }],
+    assumptions: input.audience.trim() ? [] : [{ id: "manual-audience", claim: "The primary audience still needs confirmation.", status: "proposed", evidenceIds: [] }],
+    unknowns: input.audience.trim() ? ["Industry and competitive context remain open."] : ["Primary audience, industry and competitive context remain open."],
+    questions: [],
+    strategy: {
+      audience,
+      objective,
+      positioning: "Make the value concrete without inventing unsupported brand claims.",
+      voice: "Clear, purposeful and specific.",
+      contentPriorities: ["Value proposition", "Audience relevance", "Next action"]
+    },
+    creative: {
+      opportunity: `Use the ${input.deliverable === "web" ? "page" : "story"} structure to turn the raw objective into a distinctive, testable direction.`,
+      designPrinciples: ["Lead with one strong idea", "Make hierarchy visible", "Keep the source wording traceable"],
+      avoid: ["Generic decorative styling", "Unsupported claims", "Copying a reference site's assets or copy"]
+    },
+    brandSeed: {
+      name: input.brandName.trim(),
+      industry: "To be defined",
+      audience,
+      promise: input.lockOriginal ? input.objective.trim() : objective,
+      personality: ["purposeful", "clear"],
+      tone: "Clear and purposeful",
+      visualDirection: input.deliverable === "web" ? "Distinctive digital-first hierarchy" : "Structured editorial storytelling"
+    }
+  };
+}
+
+function isPublicReferenceUrl(value: string) {
+  if (!value.trim()) return true;
+  try { return ["http:", "https:"].includes(new URL(value.trim()).protocol); }
+  catch { return false; }
+}
 
 const nav: Array<{ id: Surface; label: string; glyph: string }> = [
   { id: "sources", label: "Sources", glyph: "⊕" },
@@ -33,13 +118,21 @@ export function Studio() {
   const [showAccount, setShowAccount] = useState(false);
   const [account, setAccount] = useState<AccountState>();
   const [apiKey, setApiKey] = useState("");
-  const [newProject, setNewProject] = useState({ brandName: "", industry: "", audience: "", promise: "" });
+  const [bootstrapStep, setBootstrapStep] = useState<BootstrapStep>(1);
+  const [bootstrapInput, setBootstrapInput] = useState<BootstrapInput>(emptyBootstrap);
+  const [bootstrapSession, setBootstrapSession] = useState<BootstrapSession>();
+  const [bootstrapBrief, setBootstrapBrief] = useState<BootstrapBriefVersion>();
+  const [bootstrapAnswers, setBootstrapAnswers] = useState<Record<string, string>>({});
+  const [bootstrapError, setBootstrapError] = useState<string>();
+  const [manualBootstrap, setManualBootstrap] = useState(false);
   const [surface, setSurface] = useState<Surface>("web");
   const [selection, setSelection] = useState<SelectionContext>();
   const [instruction, setInstruction] = useState("Make this hero feel more premium and concise");
   const [busy, setBusy] = useState<string>();
   const [toast, setToast] = useState<string>();
   const [review, setReview] = useState<ReviewReport>();
+  const [pendingWebCandidate, setPendingWebCandidate] = useState<{ candidate: PendingWebCandidate; html: string }>();
+  const [candidatePreview, setCandidatePreview] = useState<"candidate" | "original">("candidate");
   const [mobile, setMobile] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [slideDocument, setSlideDocument] = useState<SlideDocument>();
@@ -205,6 +298,13 @@ export function Studio() {
       if (!response.ok) throw new Error(result.error ?? "Refinement failed");
       setData({ project: result.project, landingHtml: result.landingHtml });
       setSlideDocument(projectSlideDocument(result.project));
+      if (result.candidate && typeof result.candidateHtml === "string") {
+        setPendingWebCandidate({ candidate: result.candidate, html: result.candidateHtml });
+        setCandidatePreview("candidate");
+        setMessages((current) => [...current, { role: "assistant", text: `${result.summary} I kept it as a candidate because the visual checks found possible regressions. The candidate is visible in the preview; you decide whether to accept it.` }]);
+        setToast("Candidate ready · review the checks before deciding.");
+        return;
+      }
       const assistantText = result.changed === false
         ? `${result.unsupportedReason ?? result.summary} No source change was applied.`
         : `${result.summary} ${result.source === "codex" ? "Applied and visually checked by Codex." : "Applied with the reliable demo fallback."}`;
@@ -212,6 +312,27 @@ export function Studio() {
       setToast(result.warning ?? (result.changed === false ? "No supported source change." : `${result.filesModified.length} source files updated.`));
     } catch (error) {
       setMessages((current) => [...current, { role: "assistant", text: error instanceof Error ? error.message : "Refinement failed." }]);
+    } finally { setBusy(undefined); }
+  }
+
+  async function resolveWebCandidate(action: "accept" | "reject") {
+    if (!pendingWebCandidate) return;
+    setBusy(action === "accept" ? "Accepting candidate with warnings" : "Keeping the original version");
+    try {
+      const response = await fetch(apiForProject("/api/refine/candidate"), {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ candidateId: pendingWebCandidate.candidate.id, action })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Could not resolve the candidate.");
+      setData({ project: result.project, landingHtml: result.landingHtml });
+      projectVersion.current = result.project.version;
+      setMessages((current) => [...current, { role: "assistant", text: action === "accept" ? "Candidate accepted with its QA warnings recorded. It is now the active Web version." : "Original version kept. The candidate remains recorded in project history." }]);
+      setToast(action === "accept" ? "Candidate accepted with warnings." : "Original version kept.");
+      setPendingWebCandidate(undefined);
+      setCandidatePreview("candidate");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "Could not resolve the candidate.");
     } finally { setBusy(undefined); }
   }
 
@@ -329,19 +450,190 @@ export function Studio() {
     finally { setBusy(undefined); }
   }
 
-  async function createNewProject() {
-    setBusy("Creating project");
+  function openBootstrapWizard() {
+    setBootstrapStep(1);
+    setBootstrapInput(emptyBootstrap);
+    setBootstrapSession(undefined);
+    setBootstrapBrief(undefined);
+    setBootstrapAnswers({});
+    setBootstrapError(undefined);
+    setManualBootstrap(false);
+    setShowNewProject(true);
+  }
+
+  async function parseBootstrapResponse(response: Response, fallback: string) {
+    const result = await response.json().catch(() => ({})) as { error?: string; session?: BootstrapSession; project?: ProjectData };
+    if (!response.ok) throw new Error(result.error ?? fallback);
+    return result;
+  }
+
+  async function startBootstrap() {
+    setBootstrapStep(3);
+    setBootstrapError(undefined);
+    setBusy("Synthesizing project context");
     try {
-      const response = await fetch("/api/projects", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(newProject) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Could not create the project.");
-      const summary: ProjectSummary = { id: result.project.id, name: result.project.name, brandName: result.project.brand.name, industry: result.project.brand.industry, updatedAt: result.project.updatedAt, version: result.project.version };
-      setProjects((current) => [summary, ...current]);
-      setShowNewProject(false); setNewProject({ brandName: "", industry: "", audience: "", promise: "" });
-      await switchProject(result.project.id);
-      setToast(`${result.project.brand.name} project created.`);
-    } catch (error) { setToast(error instanceof Error ? error.message : "Could not create the project."); }
-    finally { setBusy(undefined); }
+      const referenceUrl = bootstrapInput.referenceUrl.trim();
+      const response = await fetch("/api/bootstrap", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ input: {
+          projectName: bootstrapInput.brandName.trim(),
+          brandName: bootstrapInput.brandName.trim(),
+          audience: bootstrapInput.audience.trim() || undefined,
+          objective: bootstrapInput.objective.trim(),
+          targetDeliverable: bootstrapInput.deliverable,
+          sourceRefs: referenceUrl ? [{
+            id: "bootstrap-reference-url",
+            kind: "url",
+            label: new URL(referenceUrl).hostname,
+            intent: bootstrapInput.referenceIntent,
+            locator: referenceUrl
+          }] : []
+        } })
+      });
+      const result = await parseBootstrapResponse(response, "Could not start the project brief.");
+      if (!result.session) throw new Error("The bootstrap service did not return a session.");
+      setBootstrapSession(result.session);
+      setBootstrapAnswers(Object.fromEntries(result.session.answers.map((answer) => [answer.questionId, answer.value])));
+      const brief = activeBootstrapBrief(result.session);
+      if (brief) setBootstrapBrief(brief);
+      if (!result.session.questions.length && !brief) await synthesizeBootstrap(result.session, {});
+    } catch (error) {
+      setBootstrapError(error instanceof Error ? error.message : "Could not start the project brief.");
+    } finally { setBusy(undefined); }
+  }
+
+  async function synthesizeBootstrap(sessionOverride?: BootstrapSession, answersOverride?: Record<string, string>) {
+    const currentSession = sessionOverride ?? bootstrapSession;
+    if (!currentSession) return;
+    const answers = answersOverride ?? bootstrapAnswers;
+    const requiredMissing = currentSession.questions.slice(0, 3).some((question) => question.required && !answers[question.id]?.trim());
+    if (requiredMissing) { setBootstrapError("Answer the required questions or continue manually."); return; }
+    setBusy("Turning evidence into a creative brief");
+    setBootstrapError(undefined);
+    try {
+      let session = currentSession;
+      if (session.questions.length) {
+        const response = await fetch(`/api/bootstrap/${encodeURIComponent(session.id)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ answers: session.questions.slice(0, 3).map((question) => ({ questionId: question.id, value: answers[question.id]?.trim() ?? "" })).filter((answer) => answer.value) })
+        });
+        const result = await parseBootstrapResponse(response, "Could not save the focused answers.");
+        if (!result.session) throw new Error("The bootstrap service did not return the updated session.");
+        session = result.session;
+      }
+      const response = await fetch(`/api/bootstrap/${encodeURIComponent(session.id)}/synthesize`, { method: "POST" });
+      const result = await parseBootstrapResponse(response, "Could not synthesize the creative brief.");
+      if (!result.session) throw new Error("The bootstrap service did not return a synthesized session.");
+      const brief = activeBootstrapBrief(result.session);
+      if (!brief) throw new Error("No creative brief was produced. You can retry or continue manually.");
+      setBootstrapSession(result.session);
+      setBootstrapBrief(brief);
+    } catch (error) {
+      setBootstrapError(error instanceof Error ? error.message : "Could not synthesize the creative brief.");
+    } finally { setBusy(undefined); }
+  }
+
+  function continueBootstrapManually() {
+    setManualBootstrap(true);
+    setBootstrapSession(undefined);
+    setBootstrapBrief(manualCreativeBrief(bootstrapInput));
+    setBootstrapError(undefined);
+  }
+
+  async function reviewBootstrapApproval() {
+    if (!bootstrapBrief) return;
+    setBootstrapError(undefined);
+    if (!bootstrapSession || manualBootstrap) { setBootstrapStep(4); return; }
+    setBusy("Saving the reviewed creative brief");
+    try {
+      const reviewedBrief = bootstrapInput.lockOriginal
+        ? { ...bootstrapBrief, brandSeed: { ...bootstrapBrief.brandSeed, promise: bootstrapInput.objective.trim() } }
+        : bootstrapBrief;
+      const response = await fetch(`/api/bootstrap/${encodeURIComponent(bootstrapSession.id)}/brief`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ brief: reviewedBrief, expectedVersion: bootstrapSession.activeBriefVersion ?? bootstrapBrief.version })
+      });
+      const result = await parseBootstrapResponse(response, "Could not save the reviewed creative brief.");
+      if (!result.session) throw new Error("The bootstrap service did not return the reviewed session.");
+      setBootstrapSession(result.session);
+      setBootstrapBrief(activeBootstrapBrief(result.session) ?? reviewedBrief);
+      setBootstrapStep(4);
+    } catch (error) {
+      setBootstrapError(error instanceof Error ? error.message : "Could not save the reviewed creative brief.");
+    } finally { setBusy(undefined); }
+  }
+
+  async function attachBootstrapReference(createdProjectId: string) {
+    if (!bootstrapInput.referenceUrl.trim()) return undefined;
+    try {
+      const extract = bootstrapInput.referenceIntent === "extract";
+      const response = await fetch(`/api/sources?project=${encodeURIComponent(createdProjectId)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: bootstrapInput.referenceUrl.trim(),
+          bootstrapReference: true,
+          intent: bootstrapInput.referenceIntent,
+          sourceRole: extract ? "evidence" : "inspiration",
+          relationship: "unknown",
+          rightsNotes: extract ? "Reference requested for design-system extraction; the project creator remains responsible for having appropriate rights." : "Public reference supplied for inspiration only; do not copy assets or copy.",
+          rightsConfirmed: false,
+          permissions: { analyze: true, inspire: true, reproduceAssets: false, reproduceCopy: false, distribute: false }
+        })
+      });
+      const result = await response.json().catch(() => ({})) as { error?: string; bootstrapReference?: { warning?: { message?: string } } };
+      if (!response.ok) return result.error ?? "The project was created, but its reference site could not be queued.";
+      if (result.bootstrapReference?.warning?.message) return `Project created. Reference queued with warning: ${result.bootstrapReference.warning.message}`;
+    } catch { return "The project was created, but its reference site could not be queued."; }
+    return undefined;
+  }
+
+  async function createNewProject() {
+    if (!bootstrapBrief) return;
+    setBusy("Creating the approved project");
+    setBootstrapError(undefined);
+    try {
+      let result: { project?: ProjectData };
+      if (bootstrapSession && !manualBootstrap) {
+        const response = await fetch(`/api/bootstrap/${encodeURIComponent(bootstrapSession.id)}/approve`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ briefVersion: bootstrapSession.activeBriefVersion ?? bootstrapBrief.version })
+        });
+        result = await parseBootstrapResponse(response, "Could not approve and create the project.");
+      } else {
+        const response = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: bootstrapInput.brandName.trim(),
+            brandName: bootstrapInput.brandName.trim(),
+            industry: bootstrapBrief.brandSeed.industry || "To be defined",
+            audience: bootstrapBrief.brandSeed.audience || "Audience to be defined",
+            promise: bootstrapBrief.brandSeed.promise.slice(0, 300)
+          })
+        });
+        result = await parseBootstrapResponse(response, "Could not create the project.");
+      }
+      if (!result.project) throw new Error("The bootstrap service approved the brief but did not return a project.");
+      const createdProject = result.project;
+      // A synthesized bootstrap already captured the reference in its staging
+      // project and approval migrated that durable source graph atomically.
+      // Only the manual fallback still needs to attach the URL after creation.
+      const referenceWarning = bootstrapSession && !manualBootstrap
+        ? bootstrapSession.referenceSnapshot?.warning?.message
+        : await attachBootstrapReference(createdProject.id);
+      const summary: ProjectSummary = { id: createdProject.id, name: createdProject.name, brandName: createdProject.brand.name, industry: createdProject.brand.industry, updatedAt: createdProject.updatedAt, version: createdProject.version };
+      setProjects((current) => [summary, ...current.filter((item) => item.id !== summary.id)]);
+      setShowNewProject(false);
+      await switchProject(createdProject.id);
+      setToast(referenceWarning ?? `${createdProject.brand.name} project created from the approved brief.`);
+    } catch (error) {
+      setBootstrapError(error instanceof Error ? error.message : "Could not create the project.");
+    } finally { setBusy(undefined); }
   }
 
   async function refreshAccount() {
@@ -376,6 +668,8 @@ export function Studio() {
   }
 
   const surfaceTitle = useMemo(() => nav.find((item) => item.id === surface)?.label ?? "Studio", [surface]);
+  const focusedBootstrapQuestions = bootstrapSession?.questions.slice(0, 3) ?? [];
+  const referenceReady = isPublicReferenceUrl(bootstrapInput.referenceUrl);
   if (!project || !data) return <main className="loading-screen"><div className="loader-mark">✦</div><p>Opening the studio…</p></main>;
 
   return <main className="studio-shell">
@@ -384,7 +678,7 @@ export function Studio() {
       <div className="project-crumb"><span className="status-dot"/>{project.name}<span>·</span><small>v{project.tokens.version}</small></div>
       <div className="top-actions">
         <button className="account-button" onClick={() => setShowAccount(true)}><span className={account?.account ? "connected" : ""}/>{account?.account?.type === "chatgpt" ? account.account.email ?? account.account.planType : account?.account?.type === "apiKey" ? "API account" : "Connect OpenAI"}</button>
-        <button className="ghost-button" onClick={() => setShowNewProject(true)}>＋ New project</button>
+        <button className="ghost-button" onClick={openBootstrapWizard}>＋ New project</button>
         <button className="ghost-button" onClick={reset}>Restore project</button>
         <button className="ghost-button" onClick={runReview}>✓ Review</button>
         <div className="export-menu"><span>Export</span><div><a href={apiForProject("/api/export/web")}>Landing ZIP</a><a href={apiForProject("/api/export/pptx")}>Editable PPTX</a><a href={apiForProject("/api/export/tokens")}>Tokens JSON</a></div></div>
@@ -453,7 +747,7 @@ export function Studio() {
             </article>) : <div className="source-empty">No extracted candidates yet. Process sources or add manual evidence first.</div>}</div>
           </div>}
           {surface === "assets" && <VisualAssetStudio projectId={projectId} project={project} brandSystems={systemRegistry} onBusy={setBusy} onToast={setToast}/>}
-          {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={data.landingHtml} sandbox="allow-scripts"/></div>}
+          {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span><em>↗</em></div><iframe ref={previewRef} title="Generated landing page" srcDoc={pendingWebCandidate && candidatePreview === "candidate" ? pendingWebCandidate.html : data.landingHtml} sandbox="allow-scripts"/></div>}
           {surface === "slides" && <div className="slides-canvas"><div className="slides-stage"><button className="canvas-edit-toggle" onClick={() => setSlideEditing((current) => !current)}>{slideEditing ? "Done editing" : "Edit canvas"}</button>{slideEditing && slideDocument ? <ArtifactCanvasEditor artifactId="slides" document={slideDocument} slideId={project.slides[activeSlide].id} onChange={(next) => setSlideDocument(next)} onAutosave={saveSlideCanvas}/> : <SlidePreview slide={project.slides[activeSlide]} tokens={project.tokens} brandName={project.brand.name} index={activeSlide} active onClick={() => undefined} document={slideDocument}/>}</div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={activeSlide === index} onClick={() => setActiveSlide(index)} document={slideDocument}/></div>)}</div></div>}
           {surface === "brand" && <div className="editor-card"><div className="editor-heading"><div><small>BRAND PROFILE</small><h1>Define once. Review before release.</h1><p>The profile guides every creative decision and is published only through a versioned draft.</p></div><button className="primary-button" onClick={saveSystem}>Save draft</button></div><div className="form-grid">
             <label>Brand name<input value={project.brand.name} onChange={(e) => updateProject((p) => { p.brand.name = e.target.value; return p; })}/></label>
@@ -486,7 +780,69 @@ export function Studio() {
     </div>
     {review && <div className="review-drawer"><div className="review-score"><span>{review.score}</span><div><small>BRAND HEALTH</small><strong>{review.score >= 90 ? "Ready to ship" : "Needs attention"}</strong></div><button onClick={() => setReview(undefined)}>×</button></div>{review.checks.map((check) => <div className={`review-item ${check.status}`} key={check.id}><b>{check.status === "pass" ? "✓" : check.status === "warning" ? "!" : "×"}</b><div><strong>{check.label}</strong><span>{check.message}</span></div></div>)}</div>}
     {toast && <button className="toast" onClick={() => setToast(undefined)}>{toast}<span>×</span></button>}
-    {showNewProject && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowNewProject(false); }}><section className="project-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-title"><div className="modal-heading"><div><small>NEW PROJECT</small><h2 id="new-project-title">Create a brand workspace</h2><p>The Studio will create a tailored initial system, landing page and launch deck for Codex to direct.</p></div><button aria-label="Close" onClick={() => setShowNewProject(false)}>×</button></div><div className="modal-form"><label>Brand name<input autoFocus value={newProject.brandName} onChange={(event) => setNewProject((current) => ({ ...current, brandName: event.target.value }))} placeholder="Northstar"/></label><label>Industry<input value={newProject.industry} onChange={(event) => setNewProject((current) => ({ ...current, industry: event.target.value }))} placeholder="Financial infrastructure"/></label><label>Audience<input value={newProject.audience} onChange={(event) => setNewProject((current) => ({ ...current, audience: event.target.value }))} placeholder="Finance leaders in scaling companies"/></label><label>Brand promise<textarea value={newProject.promise} onChange={(event) => setNewProject((current) => ({ ...current, promise: event.target.value }))} placeholder="Turn complexity into confident decisions."/></label></div><div className="modal-actions"><button className="ghost-button" onClick={() => setShowNewProject(false)}>Cancel</button><button className="primary-button" disabled={Object.values(newProject).some((value) => !value.trim()) || Boolean(busy)} onClick={createNewProject}>Create project</button></div></section></div>}
+    {pendingWebCandidate && <div className="modal-backdrop candidate-backdrop"><section className="project-modal candidate-modal" role="dialog" aria-modal="false" aria-labelledby="candidate-title"><div className="modal-heading"><div><small>WEB CANDIDATE · QA REVIEW</small><h2 id="candidate-title">Codex created a proposal</h2><p>{pendingWebCandidate.candidate.summary} The proposal is preserved even if you keep the original.</p></div></div><div className="candidate-preview-toggle"><button className={candidatePreview === "original" ? "active" : ""} onClick={() => setCandidatePreview("original")}>View original</button><button className={candidatePreview === "candidate" ? "active" : ""} onClick={() => setCandidatePreview("candidate")}>View candidate</button></div><div className="candidate-checks">{Object.entries(pendingWebCandidate.candidate.assessment.comparisons).map(([viewport, comparison]) => <div key={viewport}><strong>{viewport}</strong><span>Contrast failures {comparison.before.failures} → {comparison.after.failures}</span><em className={comparison.regressions.length || comparison.warnings?.length ? "warning" : "improved"}>{comparison.regressions.length ? `${comparison.regressions.join(", ")} needs review` : comparison.warnings?.length ? `${comparison.warnings.join(", ")} needs review` : "No new deterministic regression"}</em></div>)}</div><p className="candidate-note">Quality and accessibility warnings are overridable. Integrity and security failures are never offered for acceptance.</p><div className="modal-actions"><button className="ghost-button" onClick={() => resolveWebCandidate("reject")} disabled={Boolean(busy)}>Keep original</button><button className="primary-button" onClick={() => resolveWebCandidate("accept")} disabled={Boolean(busy)}>Accept with warnings</button></div></section></div>}
+    {showNewProject && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setShowNewProject(false); }}>
+      <section className="project-modal bootstrap-modal" role="dialog" aria-modal="true" aria-labelledby="new-project-title">
+        <div className="modal-heading"><div><small>NEW PROJECT · STEP {bootstrapStep} OF 4</small><h2 id="new-project-title">Create a brand workspace</h2><p>Start with intent, keep every inference visible, then approve the brief before anything is created.</p></div><button aria-label="Close" onClick={() => setShowNewProject(false)} disabled={Boolean(busy)}>×</button></div>
+        <ol className="bootstrap-progress" aria-label="Project setup progress">
+          {([1, 2, 3, 4] as BootstrapStep[]).map((step) => <li className={step === bootstrapStep ? "active" : step < bootstrapStep ? "complete" : ""} key={step}><button onClick={() => { if (step < bootstrapStep && !busy) setBootstrapStep(step); }} disabled={step > bootstrapStep || Boolean(busy)}><span>{step < bootstrapStep ? "✓" : step}</span>{step === 1 ? "Intent" : step === 2 ? "Reference" : step === 3 ? "Brief" : "Approve"}</button></li>)}
+        </ol>
+
+        {bootstrapStep === 1 && <div className="bootstrap-panel">
+          <div className="bootstrap-intro"><small>START WITH THE JOB, NOT A TEMPLATE</small><h3>What should this project make possible?</h3><p>Codex will transform your wording into a strategic brief. It will not silently copy these fields into the final brand.</p></div>
+          <div className="modal-form bootstrap-form">
+            <label>Brand name<input autoFocus value={bootstrapInput.brandName} onChange={(event) => setBootstrapInput((current) => ({ ...current, brandName: event.target.value }))} placeholder="Northstar"/></label>
+            <label>Audience <em>optional</em><input value={bootstrapInput.audience} onChange={(event) => setBootstrapInput((current) => ({ ...current, audience: event.target.value }))} placeholder="Finance leaders in scaling companies"/></label>
+            <label className="span-two">What are you trying to achieve?<textarea value={bootstrapInput.objective} onChange={(event) => setBootstrapInput((current) => ({ ...current, objective: event.target.value }))} placeholder="Help operations leaders understand our product and feel confident requesting a demo."/></label>
+          </div>
+          <fieldset className="bootstrap-choice-group"><legend>First deliverable</legend><div className="bootstrap-choices">
+            <label className={bootstrapInput.deliverable === "web" ? "selected" : ""}><input type="radio" name="bootstrap-deliverable" value="web" checked={bootstrapInput.deliverable === "web"} onChange={() => setBootstrapInput((current) => ({ ...current, deliverable: "web" }))}/><span>⌁</span><strong>Web experience</strong><small>A responsive first page and system</small></label>
+            <label className={bootstrapInput.deliverable === "slides" ? "selected" : ""}><input type="radio" name="bootstrap-deliverable" value="slides" checked={bootstrapInput.deliverable === "slides"} onChange={() => setBootstrapInput((current) => ({ ...current, deliverable: "slides" }))}/><span>▰</span><strong>Presentation</strong><small>An editable narrative and slide system</small></label>
+          </div></fieldset>
+          <div className="modal-actions"><button className="ghost-button" onClick={() => setShowNewProject(false)}>Cancel</button><button className="primary-button" disabled={!bootstrapInput.brandName.trim() || !bootstrapInput.objective.trim()} onClick={() => setBootstrapStep(2)}>Continue</button></div>
+        </div>}
+
+        {bootstrapStep === 2 && <div className="bootstrap-panel">
+          <div className="bootstrap-intro"><small>OPTIONAL REFERENCE</small><h3>Bring a site, without losing authorship.</h3><p>Use one public URL now, or skip it. Codex records whether it is evidence from your brand or inspiration only.</p></div>
+          <div className="bootstrap-reference">
+            <label>Public reference URL <em>optional</em><input type="url" value={bootstrapInput.referenceUrl} onChange={(event) => setBootstrapInput((current) => ({ ...current, referenceUrl: event.target.value }))} placeholder="https://brand.example.com" aria-describedby="reference-url-note"/></label>
+            <small id="reference-url-note">Authenticated or private pages are not accessed during bootstrap.</small>
+            {bootstrapInput.referenceUrl.trim() && !isPublicReferenceUrl(bootstrapInput.referenceUrl) && <p className="field-error">Enter a complete http or https URL.</p>}
+          </div>
+          {bootstrapInput.referenceUrl.trim() && <>
+            <fieldset className="bootstrap-choice-group"><legend>How may Codex use it?</legend><div className="bootstrap-choices reference-choices">
+              <label className={bootstrapInput.referenceIntent === "extract" ? "selected" : ""}><input type="radio" name="reference-intent" value="extract" checked={bootstrapInput.referenceIntent === "extract"} onChange={() => setBootstrapInput((current) => ({ ...current, referenceIntent: "extract" }))}/><span>⌖</span><strong>Extract design-system signals</strong><small>Treat detected rules as evidence to review</small></label>
+              <label className={bootstrapInput.referenceIntent === "inspire" ? "selected" : ""}><input type="radio" name="reference-intent" value="inspire" checked={bootstrapInput.referenceIntent === "inspire"} onChange={() => setBootstrapInput((current) => ({ ...current, referenceIntent: "inspire" }))}/><span>✦</span><strong>Use as inspiration</strong><small>Explore signals without copying assets or copy</small></label>
+            </div></fieldset>
+            <div className="bootstrap-responsibility"><span>!</span><p><strong>You remain responsible for using references lawfully.</strong> This warning does not block your selected intent. Codex does not copy source assets or copy by default.</p></div>
+          </>}
+          <div className="bootstrap-trust-note"><span>♢</span><p><strong>Your source remains traceable.</strong> Facts, inferences and assumptions stay separate in the next step.</p></div>
+          <div className="modal-actions"><button className="ghost-button" onClick={() => setBootstrapStep(1)}>Back</button><button className="primary-button" disabled={!referenceReady || Boolean(busy)} onClick={startBootstrap}>{bootstrapInput.referenceUrl.trim() ? "Analyze context" : "Continue without reference"}</button></div>
+        </div>}
+
+        {bootstrapStep === 3 && <div className="bootstrap-panel brief-panel">
+          <div className="bootstrap-intro"><small>TRACEABLE SYNTHESIS</small><h3>{bootstrapBrief ? "Review the creative brief." : focusedBootstrapQuestions.length ? "A few answers will sharpen the brief." : "Building your brief…"}</h3><p>Only high-impact unknowns are asked. You can retry the synthesis or continue with a transparent manual draft.</p></div>
+          {bootstrapError && <div className="bootstrap-error" role="alert"><div><strong>Synthesis needs your help</strong><p>{bootstrapError}</p></div><div><button className="ghost-button" onClick={() => bootstrapSession ? synthesizeBootstrap() : startBootstrap()} disabled={Boolean(busy)}>Try again</button><button className="ghost-button" onClick={continueBootstrapManually} disabled={Boolean(busy)}>Continue manually</button></div></div>}
+          {!bootstrapBrief && focusedBootstrapQuestions.length > 0 && <div className="bootstrap-questions"><div><strong>{focusedBootstrapQuestions.length} focused question{focusedBootstrapQuestions.length === 1 ? "" : "s"}</strong><span>Asked because each answer can change the direction.</span></div>{focusedBootstrapQuestions.map((question) => <label key={question.id}>{question.prompt}{question.required && <b>required</b>}{question.options?.length ? <select value={bootstrapAnswers[question.id] ?? ""} onChange={(event) => setBootstrapAnswers((current) => ({ ...current, [question.id]: event.target.value }))}><option value="">Choose one</option>{question.options.map((option) => <option value={option} key={option}>{option}</option>)}</select> : <textarea value={bootstrapAnswers[question.id] ?? ""} onChange={(event) => setBootstrapAnswers((current) => ({ ...current, [question.id]: event.target.value }))} placeholder="Your answer"/>}<small>{question.reason}</small></label>)}<button className="primary-button" onClick={() => synthesizeBootstrap()} disabled={Boolean(busy) || focusedBootstrapQuestions.some((question) => question.required && !bootstrapAnswers[question.id]?.trim())}>Synthesize brief</button></div>}
+          {!bootstrapBrief && !focusedBootstrapQuestions.length && !bootstrapError && <div className="bootstrap-loading"><span>✦</span><strong>{busy ?? "Preparing synthesis"}</strong><p>The local session preserves the original input while Codex works.</p></div>}
+          {bootstrapBrief && <>
+            <label className="original-wording"><span><small>ORIGINAL WORDING · NEVER REPLACED SILENTLY</small><q>{bootstrapInput.objective}</q></span><input aria-label="Lock original wording verbatim" type="checkbox" checked={bootstrapInput.lockOriginal} onChange={(event) => setBootstrapInput((current) => ({ ...current, lockOriginal: event.target.checked }))}/><strong>{bootstrapInput.lockOriginal ? "Locked verbatim" : "Editable seed"}</strong></label>
+            <div className="brief-editor"><label>Brief summary<textarea value={bootstrapBrief.summary} onChange={(event) => setBootstrapBrief((current) => current ? ({ ...current, summary: event.target.value }) : current)}/></label><div><label>Strategic objective<textarea value={bootstrapBrief.strategy.objective} onChange={(event) => setBootstrapBrief((current) => current ? ({ ...current, strategy: { ...current.strategy, objective: event.target.value } }) : current)}/></label><label>Positioning<textarea value={bootstrapBrief.strategy.positioning} onChange={(event) => setBootstrapBrief((current) => current ? ({ ...current, strategy: { ...current.strategy, positioning: event.target.value } }) : current)}/></label></div><label>Voice<input value={bootstrapBrief.strategy.voice} onChange={(event) => setBootstrapBrief((current) => current ? ({ ...current, strategy: { ...current.strategy, voice: event.target.value } }) : current)}/></label></div>
+            <div className="brief-trace"><section><header><span>●</span><strong>Facts</strong><small>{bootstrapBrief.facts.length}</small></header>{bootstrapBrief.facts.length ? bootstrapBrief.facts.map((fact) => <p key={fact.id}>{fact.claim}</p>) : <p>No source-backed facts yet.</p>}</section><section><header><span>◐</span><strong>Inferences</strong><small>{bootstrapBrief.inferences.length}</small></header>{bootstrapBrief.inferences.length ? bootstrapBrief.inferences.map((inference) => <p key={inference.id}>{inference.claim}<em>{Math.round(inference.confidence * 100)}% confidence</em></p>) : <p>No inference was required.</p>}</section><section><header><span>◇</span><strong>Assumptions</strong><small>{bootstrapBrief.assumptions.length}</small></header>{bootstrapBrief.assumptions.length ? bootstrapBrief.assumptions.map((assumption) => <p key={assumption.id}>{assumption.claim}<em>{assumption.status}</em></p>) : <p>No open assumption.</p>}</section></div>
+            {bootstrapBrief.unknowns.length > 0 && <div className="brief-unknowns"><strong>Still unknown</strong><span>{bootstrapBrief.unknowns.join(" · ")}</span></div>}
+            <div className="modal-actions"><button className="ghost-button" onClick={() => setBootstrapStep(2)}>Back to sources</button><button className="primary-button" onClick={reviewBootstrapApproval} disabled={!bootstrapBrief.summary.trim() || !bootstrapBrief.strategy.objective.trim() || Boolean(busy)}>Continue to approval</button></div>
+          </>}
+        </div>}
+
+        {bootstrapStep === 4 && bootstrapBrief && <div className="bootstrap-panel approval-panel">
+          <div className="bootstrap-intro"><small>EXPLICIT APPROVAL</small><h3>Ready to create, not overwrite.</h3><p>Approval creates a new local project and its first versioned brief. No existing workspace or repository is changed.</p></div>
+          {bootstrapError && <div className="bootstrap-error" role="alert"><div><strong>Project not created</strong><p>{bootstrapError}</p></div></div>}
+          <article className="approval-card"><header><div><small>{bootstrapInput.deliverable === "web" ? "WEB EXPERIENCE" : "PRESENTATION"}</small><h4>{bootstrapBrief.title}</h4></div><span>{manualBootstrap ? "Manual recovery" : "Synthesized"}</span></header><p>{bootstrapBrief.summary}</p><dl><div><dt>Audience</dt><dd>{bootstrapBrief.strategy.audience}</dd></div><div><dt>Positioning</dt><dd>{bootstrapBrief.strategy.positioning}</dd></div><div><dt>Voice</dt><dd>{bootstrapBrief.strategy.voice}</dd></div></dl><div className="approval-principles">{bootstrapBrief.creative.designPrinciples.map((principle) => <span key={principle}>{principle}</span>)}</div></article>
+          <div className="approval-provenance"><span>✓ Original wording {bootstrapInput.lockOriginal ? "locked" : "preserved"}</span><span>✓ {bootstrapBrief.facts.length} facts separated from {bootstrapBrief.inferences.length} inferences</span><span>✓ Reference {bootstrapInput.referenceUrl.trim() ? bootstrapInput.referenceIntent === "extract" ? "selected for extraction" : "selected for inspiration" : "not supplied"}</span></div>
+          <div className="modal-actions"><button className="ghost-button" onClick={() => setBootstrapStep(3)}>Review brief</button><button className="primary-button" onClick={createNewProject} disabled={Boolean(busy)}>{busy ? "Creating…" : "Approve & create project"}</button></div>
+        </div>}
+      </section>
+    </div>}
     {showAccount && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowAccount(false); }}><section className="project-modal account-modal" role="dialog" aria-modal="true" aria-labelledby="account-title"><div className="modal-heading"><div><small>OPENAI ACCOUNT</small><h2 id="account-title">{account?.account ? "Codex is connected" : "Connect Codex"}</h2><p>{account?.account ? "Your credentials stay in the Codex keychain and are never stored by the project." : "Use your ChatGPT subscription or an OpenAI Platform API key."}</p></div><button aria-label="Close" onClick={() => setShowAccount(false)}>×</button></div>{account?.account ? <div className="account-summary"><span className="account-mark">✓</span><div><strong>{account.account.type === "chatgpt" ? account.account.email ?? "ChatGPT account" : "OpenAI API key"}</strong><small>{account.account.type === "chatgpt" ? `${account.account.planType} plan` : "Usage-based billing"}</small></div><button className="ghost-button" onClick={disconnectAccount}>Sign out</button></div> : <div className="account-options"><button className="chatgpt-login" onClick={() => connectAccount("login")} disabled={Boolean(busy)}><span>✦</span><div><strong>Continue with ChatGPT</strong><small>Use your Codex subscription and workspace access</small></div><b>→</b></button><div className="account-divider"><span>or use an API key</span></div><label>OpenAI API key<div><input type="password" autoComplete="off" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder="sk-…"/><button onClick={() => connectAccount("apiKey")} disabled={!apiKey.trim() || Boolean(busy)}>Connect</button></div><small>The key is passed directly to the local Codex login flow.</small></label></div>}</section></div>}
   </main>;
 }
