@@ -32,7 +32,10 @@ export function projectRoot(projectId = "demo") {
 }
 
 function assertInside(root: string, candidate: string) {
-  if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`)) throw new Error("Path escapes authorized workspace");
+  const relative = path.relative(root, candidate);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("Path escapes authorized workspace");
+  }
   return candidate;
 }
 
@@ -74,7 +77,8 @@ export async function safeProjectPath(projectId: string, ...segments: string[]) 
 export function assertInsideProject(projectId: string, candidate: string) {
   const root = projectRoot(projectId);
   const resolved = path.resolve(candidate);
-  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+  const relative = path.relative(root, resolved);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error("Path escapes project workspace");
   }
   return resolved;

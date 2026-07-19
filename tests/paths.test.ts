@@ -6,7 +6,7 @@ import { assertInsideProject, canonicalPathInside, projectRoot, safeProjectPath 
 
 describe("project workspace boundary", () => {
   it("accepts project-local paths", () => {
-    expect(assertInsideProject("demo", path.join(projectRoot("demo"), "web", "index.html"))).toContain("projects/demo/web/index.html");
+    expect(assertInsideProject("demo", path.join(projectRoot("demo"), "web", "index.html")).split(path.sep).join("/")).toContain("projects/demo/web/index.html");
   });
 
   it("rejects traversal and invalid identifiers", () => {
