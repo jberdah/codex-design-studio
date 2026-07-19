@@ -36,7 +36,12 @@ function releaseName(file) {
   return name;
 }
 
-const sourceFiles = (await filesBelow(makeRoot)).sort();
+const sourceFiles = (await filesBelow(makeRoot)).filter((file) => {
+  if (platform === "darwin") return file.endsWith(".dmg");
+  if (platform === "win32") return path.basename(file) === "Setup.exe";
+  return true;
+}).sort();
+if (sourceFiles.length === 0) throw new Error(`No primary ${platform}-${architecture} release asset was produced.`);
 const names = new Set();
 for (const source of sourceFiles) {
   const name = releaseName(source);

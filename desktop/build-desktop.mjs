@@ -31,7 +31,10 @@ await rm(path.join(root, "out"), { recursive: true, force: true });
 await rm(path.join(root, "desktop-runtime"), { recursive: true, force: true });
 await execute(process.execPath, [npmEntrypoint, "run", "build"], "Next.js build");
 await execute(process.execPath, [npmEntrypoint, "run", "desktop:prepare"], "desktop runtime preparation");
-await execute(process.execPath, [forgeEntrypoint, mode, "--arch", architecture], `Electron Forge ${mode}`);
+// macOS uses our deterministic DMG step below, so a second Forge ZIP would
+// duplicate the complete runtime in CI and GitHub Releases.
+const forgeMode = mode === "make" && process.platform === "darwin" ? "package" : mode;
+await execute(process.execPath, [forgeEntrypoint, forgeMode, "--arch", architecture], `Electron Forge ${forgeMode}`);
 
 if (mode === "make" && process.platform === "darwin") {
   await execute(process.execPath, [path.join(root, "desktop", "make-dmg.mjs"), `--arch=${architecture}`], "DMG creation");
