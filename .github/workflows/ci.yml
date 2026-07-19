@@ -15,9 +15,15 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, test, build, and browser E2E
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Verify (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        # The product targets macOS Apple Silicon, macOS Intel, and Windows;
+        # the suite must stay green on every runtime judges can use.
+        os: [ubuntu-latest, macos-latest, macos-13, windows-latest]
 
     steps:
       - name: Check out repository
@@ -36,6 +42,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Audit production dependencies
+        if: runner.os == 'Linux'
         run: npm audit --omit=dev --audit-level=high
 
       - name: Run complete verification
