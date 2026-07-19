@@ -53,4 +53,4 @@ Brand bootstrap inputs live in a separate, portable provenance sidecar. `sources
 
 ## Remaining production work
 
-The current package is a macOS x64, local-first submission build. A commercial release would add code signing and notarization, per-platform installers, auto-update, crash reporting with consent, encrypted cloud sync, collaboration, storage quotas, and a supervised job queue for concurrent agent work.
+The current release pipeline produces local-first submission builds for macOS Intel (`darwin-x64`), macOS Apple Silicon (`darwin-arm64`), and Windows (`win32-x64`). A commercial release would add code signing and notarization, auto-update, crash reporting with consent, encrypted cloud sync, collaboration, storage quotas, and a supervised job queue for concurrent agent work.
