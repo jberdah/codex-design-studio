@@ -1,7 +1,7 @@
 {
   "name": "codex-design-studio",
   "productName": "Codex Design Studio",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local-first AI creative workspace powered by GPT-5.6 and Codex.",
   "author": "jberdah",
   "private": true,

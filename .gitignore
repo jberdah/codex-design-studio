@@ -12,6 +12,7 @@ coverage/
 .local-reference-assets/
 .local-project-materials/
 media/video/*.webm
+media/video/*.mp4
 .brainclaw/
 projects/*/history/
 projects/*/exports/

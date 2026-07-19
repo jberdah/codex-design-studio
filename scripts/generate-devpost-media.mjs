@@ -176,7 +176,7 @@ try {
   await compose({ number: 3, title: "Evidence becomes an executable system.", body: "Provenance, reconciliation, and versioned tokens keep every deliverable aligned.", source: path.join(raw, "system.png"), accent: "#587A67", proof: "VERSIONED BRAND SYSTEM" });
   await compose({ number: 4, title: "Codex edits the real artifact.", body: "Composition-level HTML, CSS, and SVG changes happen inside the project—not in a detached mockup.", source: path.join(raw, "landing.png"), accent: "#7657F6", proof: "REAL CODE · RESPONSIVE PREVIEW" });
   await compose({ number: 5, title: "Proof before promotion.", body: "Responsive rendering and deterministic checks keep every candidate reviewable. The user decides.", source: path.join(raw, "candidate.png"), accent: "#D68B32", proof: "TRANSACTIONAL VISUAL QA" });
-  await compose({ number: 6, title: "One system. Several editable outputs.", body: "Responsive Web, editable slides, visual assets, and exports share the same brand truth.", source: path.join(raw, "slides.png"), accent: "#587A67", proof: "164 TESTS · 9 BROWSER JOURNEYS" });
+  await compose({ number: 6, title: "One system. Several editable outputs.", body: "Responsive Web, editable slides, visual assets, and exports share the same brand truth.", source: path.join(raw, "slides.png"), accent: "#587A67", proof: "181 TESTS · 10 BROWSER JOURNEYS" });
 } finally {
   await browser?.close().catch(() => undefined);
   server.kill("SIGTERM");

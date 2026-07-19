@@ -30,7 +30,7 @@ Say:
 
 ## 1:10–1:50 — Codex changes the real artifact
 
-Open the landing page, select the hero or navigation in the live preview, and submit one composition-level instruction prepared in advance.
+Open the landing page, briefly toggle **Edit canvas** to demonstrate direct manipulation, then select the hero or navigation in the live preview and submit one composition-level instruction prepared in advance.
 
 Show that the resulting HTML/CSS/SVG visibly changes—not only the copy or colours. If a live call is too slow, use the rehearsed deterministic candidate while explaining that the same transaction boundary is exercised.
 
@@ -64,4 +64,4 @@ Return to the full workspace and say:
 - no notifications, credentials, local absolute paths, or third-party trademarks;
 - fictional project reset before recording;
 - downloads and live network calls rehearsed before the take;
-- final YouTube or Vimeo link tested in a private browser window.
+- final public YouTube link tested in a private browser window.

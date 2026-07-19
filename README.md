@@ -155,13 +155,13 @@ This makes model output inspectable rather than trusting a textual claim that a 
 
 The current source baseline passes:
 
-- **164 Vitest unit, domain, renderer, and integration checks**;
-- **9 end-to-end Chromium journeys**;
+- **181 Vitest unit, domain, renderer, and integration checks** on macOS/Linux;
+- **10 end-to-end Chromium journeys**;
 - **1 Electron workspace lifecycle journey**;
 - TypeScript generation and typecheck; and
 - the standalone Next.js production build.
 
-Three opt-in live tests are skipped by default because they require external services or account state. Reproduce the standard evidence with:
+Four opt-in or platform-gated tests are skipped by default on macOS/Linux because they require external services, account state, or another operating system. Windows passes 179 applicable checks and skips six. Reproduce the standard evidence with:
 
 ```bash
 npm run check:all

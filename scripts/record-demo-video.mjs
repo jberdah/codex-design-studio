@@ -65,24 +65,31 @@ try {
 
   await page.goto(`${baseURL}/?project=demo`, { waitUntil: "networkidle" });
   await page.getByText("Codex Design Studio").waitFor();
-  await hold(page, 3_500);
+  await hold(page, 6_000);
 
   await page.getByRole("button", { name: /New project/ }).click();
   const bootstrap = page.getByRole("dialog", { name: "Create a brand workspace" });
   await bootstrap.getByLabel("Brand name").fill("Northstar Atelier");
   await bootstrap.getByLabel("Audience").fill("Independent product teams");
   await bootstrap.getByLabel("What are you trying to achieve?").fill("Turn one trusted brand direction into every launch asset.");
-  await hold(page, 2_500);
+  await hold(page, 7_000);
   await bootstrap.getByRole("button", { name: "Continue" }).click();
   await bootstrap.getByLabel("Public reference URL").fill("https://reference.example.com");
   await bootstrap.getByLabel("Use as inspiration").check();
-  await hold(page, 4_000);
+  await hold(page, 7_000);
   await bootstrap.getByLabel("Close").click();
 
   await page.getByRole("button", { name: "Design system" }).click();
-  await hold(page, 4_500);
+  await hold(page, 8_000);
   await page.getByRole("button", { name: "Landing page" }).click();
-  await hold(page, 3_500);
+  await hold(page, 4_500);
+
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+  const editablePreview = page.frameLocator('iframe[title="Editable Web artifact"]');
+  await editablePreview.locator('[data-design-node-id="hero-title"]').click();
+  await page.locator(".artifact-edit-toolbar strong").filter({ hasText: "Hero title" }).waitFor();
+  await hold(page, 7_500);
+  await page.getByRole("button", { name: "Done editing" }).click();
 
   const project = await (await page.request.get(`${baseURL}/api/project?project=demo`)).json();
   await page.route(/\/api\/refine\?/, async (route) => {
@@ -114,18 +121,25 @@ try {
   const preview = page.frameLocator('iframe[title="Generated landing page"]');
   await preview.locator('[data-design-id="hero"]').click();
   await page.getByLabel("Refinement instruction").fill("Make the hero more distinctive and editorial.");
-  await hold(page, 1_500);
+  await hold(page, 4_000);
   await page.getByLabel("Send instruction").click();
   await page.getByRole("dialog", { name: "Codex created a proposal" }).waitFor();
-  await hold(page, 5_000);
+  await hold(page, 9_000);
 
   await page.reload({ waitUntil: "networkidle" });
   await page.getByRole("button", { name: /Review/ }).click();
   await page.locator(".review-drawer").waitFor();
-  await hold(page, 3_500);
+  await hold(page, 6_500);
   await page.locator(".review-drawer button").click();
   await page.getByRole("button", { name: "Presentation" }).click();
-  await hold(page, 5_000);
+  await hold(page, 7_000);
+  await page.getByRole("button", { name: "Edit canvas" }).click();
+  await page.locator('.artifact-canvas-editor [data-node-id="slide-cover:title"]').click();
+  await hold(page, 6_500);
+  await page.getByRole("button", { name: "Done editing" }).click();
+  await page.locator(".export-menu").hover();
+  await page.getByRole("link", { name: "Editable PPTX" }).waitFor();
+  await hold(page, 6_500);
 
   const video = page.video();
   await page.close();
