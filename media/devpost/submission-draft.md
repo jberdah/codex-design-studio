@@ -7,7 +7,7 @@
 - **Recommended track:** Work and Productivity
 - **Repository:** https://github.com/jberdah/codex-design-studio
 - **Release:** https://github.com/jberdah/codex-design-studio/releases/tag/v0.1.1
-- **Public YouTube demo:** `REPLACE_WITH_PUBLIC_YOUTUBE_URL`
+- **Public YouTube demo:** https://youtu.be/aqHBoggxBLY
 - **Codex Session ID for `/feedback`:** `019f753a-8158-7d83-96ee-c879df7866ce`
 - **Final video file:** `codex-design-studio-build-week-final.mp4`
 - **Final video SHA-256:** `0832b4bcedaf50963a716ce4f8d15bda9d442f78b8b9414b96c787782d9fbae1`
@@ -57,7 +57,5 @@ The deterministic source path is `npm ci && npm run preflight && npm run check:a
 
 ## Final manual gate
 
-- Upload the final MP4 as a public YouTube video.
-- Replace the YouTube placeholder above and test the URL in a private browser.
 - Submit `/feedback` from the recorded Codex Session ID.
 - Confirm that the Devpost project is public and all required fields are complete.
