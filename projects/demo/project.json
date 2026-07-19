@@ -2,8 +2,8 @@
   "id": "demo",
   "name": "Asteria Launch",
   "createdAt": "2026-07-18T09:00:00.000Z",
-  "updatedAt": "2026-07-18T09:00:00.000Z",
-  "version": 1,
+  "updatedAt": "2026-07-18T14:15:27.883Z",
+  "version": 5,
   "brand": {
     "name": "Asteria",
     "industry": "Climate intelligence",
@@ -15,10 +15,10 @@
       "premium"
     ],
     "tone": "Clear, confident and human",
-    "visualDirection": "Editorial clarity, luminous gradients and generous space"
+    "visualDirection": "Editorial clarity, luminous gradients and generous space; pair labeled menu items with restrained monoline icons—layers for Platform, compass for Approach, chart for Insights and arrow for Talk to us—while retaining text labels"
   },
   "tokens": {
-    "version": "0.1.0",
+    "version": "0.1.3",
     "colors": {
       "primary": "#1C3D38",
       "secondary": "#7B8F69",
@@ -68,8 +68,8 @@
   },
   "landing": {
     "eyebrow": "Climate intelligence, clarified",
-    "headline": "See the signal. Shape what comes next.",
-    "subhead": "Asteria turns scattered operational data into a clear, shared path toward measurable climate progress.",
+    "headline": "Clarity for every climate decision.",
+    "subhead": "Turn fragmented operational and climate data into confident, measurable action.",
     "primaryCta": "Explore your impact",
     "secondaryCta": "View the platform",
     "benefits": [
@@ -102,7 +102,7 @@
     ],
     "finalHeadline": "Move from climate ambition to operational clarity.",
     "navigation": {
-      "showIcons": false,
+      "showIcons": true,
       "items": [
         {
           "label": "Platform",
@@ -158,5 +158,8 @@
         }
       ]
     }
-  ]
+  ],
+  "threadId": "019f754e-ef18-7cf3-ba90-c7a9cad8daec",
+  "lastSummary": "Refined the selected web hero with lighter editorial typography, more deliberate spacing, elevated CTA styling, and a layered luminous orb. Copy and the selection bridge remain unchanged.",
+  "webCustomized": true
 }

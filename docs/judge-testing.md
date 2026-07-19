@@ -4,9 +4,9 @@
 
 1. Open the [latest GitHub Release](https://github.com/jberdah/codex-design-studio/releases/latest).
 2. Download the package matching the test machine:
-   - macOS Intel: `Codex-Design-Studio-0.1.0-darwin-x64.dmg`;
-   - macOS Apple Silicon: `Codex-Design-Studio-0.1.0-darwin-arm64.dmg`;
-   - Windows x64: `Codex-Design-Studio-0.1.0-win32-x64-Setup.exe`.
+   - macOS Intel: `Codex-Design-Studio-0.1.1-darwin-x64.dmg`;
+   - macOS Apple Silicon: `Codex-Design-Studio-0.1.1-darwin-arm64.dmg`;
+   - Windows x64: `Codex-Design-Studio-0.1.1-win32-x64-Setup.exe`.
 3. Verify the matching entry in `SHA256SUMS-<platform>-<architecture>.txt`.
 4. Open Codex Design Studio and choose or create an empty local workspace folder.
 5. Connect a ChatGPT/Codex account from the account control. Project credentials are not stored in the workspace.
@@ -26,7 +26,7 @@ shasum -a 256 -c SHA256SUMS-darwin-arm64.txt
 Use `darwin-x64` instead on an Intel Mac. On Windows, run `Get-FileHash` in PowerShell and compare its output with `SHA256SUMS-win32-x64.txt`:
 
 ```powershell
-Get-FileHash .\Codex-Design-Studio-0.1.0-win32-x64-Setup.exe -Algorithm SHA256
+Get-FileHash .\Codex-Design-Studio-0.1.1-win32-x64-Setup.exe -Algorithm SHA256
 ```
 
 ## Unsigned-build notice

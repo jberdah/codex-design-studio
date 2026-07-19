@@ -4,7 +4,7 @@ This record describes reproducible evidence for the OpenAI Build Week submission
 
 ## Source baseline
 
-Verification completed on 19 July 2026 in Europe/Paris with:
+Verification completed on 20 July 2026 in Europe/Paris with:
 
 - Node.js `22.23.1`;
 - npm `10.9.8`;
@@ -22,14 +22,14 @@ npm run test:electron
 
 Results:
 
-- 164 Vitest checks passed;
-- 3 opt-in live tests skipped by default;
-- 9 Chromium end-to-end journeys passed;
+- 181 Vitest checks passed on macOS/Linux and 179 applicable checks passed on Windows;
+- 4 opt-in or platform-gated tests were skipped on macOS/Linux and 6 on Windows;
+- 10 Chromium end-to-end journeys passed;
 - 1 Electron workspace lifecycle journey passed;
 - TypeScript generation and typecheck passed; and
 - the standalone Next.js production build passed.
 
-GitHub CI reproduced the source verification on the public repository for pull request #7.
+GitHub CI reproduced the source verification on Linux, macOS Apple Silicon, macOS Intel, and Windows for [pull request #8](https://github.com/jberdah/codex-design-studio/pull/8) in [run 29706474295](https://github.com/jberdah/codex-design-studio/actions/runs/29706474295).
 
 ## Covered product journeys
 
@@ -43,7 +43,8 @@ The Chromium suite verifies:
 6. non-blocking reference responsibility warnings and manual recovery;
 7. slide scene-node editing, keyboard control, undo, and autosaved persistence;
 8. flushing pending canvas edits when edit mode closes; and
-9. stable inline Web editing preserved after reload.
+9. stable inline Web editing preserved after reload; and
+10. direct Web canvas editing with selection, undo, autosave, and transactional persistence.
 
 The Electron journey verifies native workspace selection state, relaunch persistence, and revocation through the context-isolated preload bridge.
 
@@ -82,13 +83,13 @@ The host never treats a model summary as proof that a visual change succeeded.
 
 ## Packaged desktop evidence
 
-The native release matrix passed on 19 July 2026 in [GitHub Actions run 29682734570](https://github.com/jberdah/codex-design-studio/actions/runs/29682734570):
+The native release matrix passed on 20 July 2026 in [GitHub Actions run 29706474290](https://github.com/jberdah/codex-design-studio/actions/runs/29706474290):
 
 - macOS Intel (`macos-15-intel`, `darwin-x64`);
 - macOS Apple Silicon (`macos-15`, `darwin-arm64`); and
 - Windows x64 (`windows-2025`, `win32-x64`).
 
-Each job independently passed TypeScript and all 164 deterministic checks, built its native distributable, verified the embedded Next.js server, executed bundled Codex CLI `0.144.5`, launched the bundled Chromium headless shell and rendered a diagnostic page, then launched and relaunched the packaged Electron application through the workspace lifecycle journey.
+Each job independently passed TypeScript and every applicable deterministic check (181 on both macOS architectures; 179 on Windows with two additional platform-inapplicable checks skipped), built its native distributable, verified the embedded Next.js server, executed bundled Codex CLI `0.144.5`, launched the bundled Chromium headless shell and rendered a diagnostic page, then launched and relaunched the packaged Electron application through the workspace lifecycle journey.
 
 Release staging keeps only one primary installer per platform plus its SHA-256 manifest: DMG for macOS and Setup.exe for Windows. Development ZIPs and Squirrel update payloads are not duplicated in the public release.
 
