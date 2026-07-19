@@ -184,7 +184,7 @@ export function assertBootstrapTransition(from: BootstrapStatus, to: BootstrapSt
 export function createBootstrapQuestions(input: BootstrapInput): BootstrapQuestion[] {
   const definitions: Record<BootstrapField, Omit<BootstrapQuestion, "id" | "field">> = {
     brandName: { prompt: "What name should this project use for the brand?", reason: "A stable brand identity is required before a project can be created.", required: true },
-    audience: { prompt: "Who must this experience help or persuade?", reason: "Audience intent shapes hierarchy, language and calls to action.", required: true },
+    audience: { prompt: "Who must this experience help or persuade?", reason: "Audience intent shapes hierarchy, language and calls to action; unanswered, the brief keeps an explicit 'to confirm' placeholder instead of inventing one.", required: false },
     objective: { prompt: "What should this project help the audience understand or achieve?", reason: "Codex needs the original objective so it can transform intent without inventing product claims.", required: true },
     targetDeliverable: { prompt: "Which deliverable should Codex create first?", reason: "The first artifact determines the initial creative and validation workflow.", required: true, options: ["web", "slides"] },
     promise: { prompt: "What should the audience understand or be able to do?", reason: "The project needs an explicit objective instead of invented product claims.", required: true },
@@ -193,6 +193,9 @@ export function createBootstrapQuestions(input: BootstrapInput): BootstrapQuesti
   const missing: BootstrapField[] = [];
   if (!input.brandName?.trim()) missing.push("brandName");
   if (!(input.objective?.trim() || input.promise?.trim())) missing.push("objective");
+  // The brief validator requires a usable audience, so it must be asked rather
+  // than invented by synthesis when the intake left it blank.
+  if (!input.audience?.trim()) missing.push("audience");
   if (!input.targetDeliverable && !input.deliverables?.length) missing.push("targetDeliverable");
   return missing.slice(0, 3).map((field) => ({ id: `question:${field}`, field, ...definitions[field] }));
 }

@@ -183,7 +183,9 @@ export async function createBootstrapSession(raw: unknown): Promise<BootstrapSes
   const session: BootstrapSession = {
     schemaVersion: 1,
     id,
-    status: questions.length ? "collecting" : "ready",
+    // Advisory questions may accompany a ready session; only unanswered
+    // required questions hold the bootstrap in the collecting state.
+    status: questions.some((question) => question.required) ? "collecting" : "ready",
     originalInput: structuredClone(originalInput),
     inputHash: hash(originalInput),
     sourceRefs: structuredClone(originalInput.sourceRefs ?? []),

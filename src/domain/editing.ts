@@ -72,18 +72,28 @@ export interface GeneratedControlDefinition {
   scopes: Array<"selection" | "group" | "slide" | ResponsiveScope>;
 }
 
-/** Controls exposed by generated UIs. Every value and target scope is constrained. */
+/**
+ * Controls exposed by generated UIs. Every value and target scope is
+ * constrained, and the advertised scopes match what the engine can apply:
+ * spacing and layout controls are Web-only (slide nodes have no padding, gap,
+ * or column model), while typography, colour, and density act on slide nodes.
+ */
 export const GENERATED_ARTIFACT_CONTROLS: readonly GeneratedControlDefinition[] = [
-  { id: "spacing.padding", category: "spacing", label: "Padding", valueType: "number", min: 0, max: 240, step: 1, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
-  { id: "spacing.gap", category: "spacing", label: "Gap", valueType: "number", min: 0, max: 240, step: 1, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
+  { id: "spacing.padding", category: "spacing", label: "Padding", valueType: "number", min: 0, max: 240, step: 1, scopes: ["shared", "desktop", "mobile"] },
+  { id: "spacing.gap", category: "spacing", label: "Gap", valueType: "number", min: 0, max: 240, step: 1, scopes: ["shared", "desktop", "mobile"] },
   { id: "color.foreground", category: "color", label: "Text colour", valueType: "color", scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
   { id: "color.background", category: "color", label: "Fill colour", valueType: "color", scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
   { id: "typography.size", category: "typography", label: "Type size", valueType: "number", min: 8, max: 256, step: 1, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
   { id: "typography.weight", category: "typography", label: "Type weight", valueType: "number", min: 100, max: 900, step: 100, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
   { id: "typography.lineHeight", category: "typography", label: "Line height", valueType: "number", min: 0.8, max: 3, step: 0.05, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
   { id: "density", category: "density", label: "Density", valueType: "number", min: 0.5, max: 2, step: 0.05, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] },
-  { id: "layout.columns", category: "layout", label: "Columns", valueType: "number", min: 1, max: 12, step: 1, scopes: ["selection", "group", "slide", "shared", "desktop", "mobile"] }
+  { id: "layout.columns", category: "layout", label: "Columns", valueType: "number", min: 1, max: 12, step: 1, scopes: ["shared", "desktop", "mobile"] }
 ] as const;
+
+/** Accepts the CSS hex colour forms: #rgb, #rgba, #rrggbb, #rrggbbaa. */
+export function isCssHexColor(value: string) {
+  return /^#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})$/i.test(value);
+}
 
 export interface EditFeedback {
   level: "info" | "warning";
@@ -150,13 +160,42 @@ function assertTextSelection(selection: TextSelectionContext | undefined, text: 
   if (![selection.anchor, selection.focus].every(Number.isInteger) || selection.anchor < 0 || selection.focus < 0 || selection.anchor > text.length || selection.focus > text.length) throw new Error("Text selection falls outside the edited value.");
 }
 
-function slideControl(nodes: SlideNode[], controlId: GeneratedControlId, value: string | number) {
+function slideControlApplies(controlId: GeneratedControlId, node: SlideNode) {
+  if (controlId === "typography.size" || controlId === "typography.weight" || controlId === "typography.lineHeight" || controlId === "color.foreground") return node.type === "text";
+  if (controlId === "color.background") return node.type === "shape";
+  if (controlId === "density") return node.type !== "group";
+  return false;
+}
+
+/**
+ * Expands the selection to the operation's declared scope: the whole slide,
+ * the enclosing groups' members, or the explicit selection unchanged.
+ */
+function resolveControlScope(slide: SlideDocument["slides"][number], nodes: SlideNode[], scope: "selection" | "group" | "slide") {
+  if (scope === "selection") return { targets: nodes, expanded: false };
+  if (scope === "slide") return { targets: slide.nodes, expanded: true };
+  const ids = new Set<string>();
+  for (const node of nodes) {
+    const groupId = node.type === "group" ? node.id : node.groupId;
+    const group = groupId ? slide.nodes.find((candidate) => candidate.id === groupId) : undefined;
+    if (group?.type === "group") for (const childId of group.childIds) ids.add(childId);
+    else ids.add(node.id);
+  }
+  return { targets: slide.nodes.filter((node) => ids.has(node.id)), expanded: true };
+}
+
+function slideControl(nodes: SlideNode[], controlId: GeneratedControlId, value: string | number, dimensions: { width: number; height: number }, expanded = false) {
   const definition = GENERATED_ARTIFACT_CONTROLS.find((control) => control.id === controlId);
   if (!definition) throw new Error("Unknown generated control.");
   if (definition.valueType === "number") {
     if (typeof value !== "number" || !Number.isFinite(value) || value < (definition.min ?? -Infinity) || value > (definition.max ?? Infinity)) throw new Error(`${definition.label} is outside its safe range.`);
-  } else if (typeof value !== "string" || !/^#[\da-f]{3,8}$/i.test(value)) throw new Error(`${definition.label} must be a hexadecimal colour.`);
-  for (const node of nodes) {
+  } else if (typeof value !== "string" || !isCssHexColor(value)) throw new Error(`${definition.label} must be a hexadecimal colour.`);
+  if (!definition.scopes.some((scope) => scope === "selection" || scope === "group" || scope === "slide")) throw new Error(`${definition.label} is only available for Web layout nodes.`);
+  // A scope-expanded target set applies to every node the control understands;
+  // an explicit selection must match exactly so mistakes surface as errors.
+  const targets = expanded ? nodes.filter((node) => slideControlApplies(controlId, node)) : nodes;
+  if (expanded && !targets.length) throw new Error(`${definition.label} matches no node in the selected scope.`);
+  for (const node of targets) {
     if (controlId === "typography.size" || controlId === "typography.weight" || controlId === "typography.lineHeight" || controlId === "color.foreground") {
       if (node.type !== "text") throw new Error(`${definition.label} only applies to text nodes.`);
       const patch: TypographyPatch = controlId === "typography.size" ? { fontSize: value as number }
@@ -167,12 +206,13 @@ function slideControl(nodes: SlideNode[], controlId: GeneratedControlId, value: 
     } else if (controlId === "color.background") {
       if (node.type !== "shape") throw new Error("Fill colour only applies to shape nodes.");
       node.fill = value as string;
-    } else if (controlId === "density") {
-      const factor = value as number;
-      node.frame.width *= factor;
-      node.frame.height *= factor;
     } else {
-      throw new Error(`${definition.label} is only available for Web layout nodes.`);
+      // density: group frames are decorative (rendering flattens groups), so
+      // scaling them silently corrupts state instead of changing pixels.
+      if (node.type === "group") throw new Error("Density applies to individual nodes; select the group's contents instead.");
+      const factor = value as number;
+      node.frame.width = clamp(node.frame.width * factor, 1, Math.max(1, dimensions.width - node.frame.x));
+      node.frame.height = clamp(node.frame.height * factor, 1, Math.max(1, dimensions.height - node.frame.y));
     }
   }
 }
@@ -354,8 +394,9 @@ export function applyArtifactEdits<TDocument extends EditableArtifactDocument>(s
         if (operation.typography) typography(node, operation.typography);
         const overflow = textOverflow(node); if (overflow) feedback.push(overflow);
       } else if (operation.type === "slide.control") {
-        const { nodes } = slideAndNodes(document, operation.slideId, operation.nodeIds);
-        slideControl(nodes, operation.control, operation.value);
+        const { slide, nodes } = slideAndNodes(document, operation.slideId, operation.nodeIds);
+        const { targets, expanded } = resolveControlScope(slide, nodes, operation.scope);
+        slideControl(targets, operation.control, operation.value, document.dimensions, expanded);
       }
     } else {
       if (operation.type === "web.text") {
