@@ -32,14 +32,14 @@ await mkdir(releaseRoot, { recursive: true });
 
 function releaseName(file) {
   const name = path.basename(file);
-  if (name === "Setup.exe") return `Codex-Design-Studio-${manifest.version}-${platform}-${architecture}-Setup.exe`;
+  if (platform === "win32" && name.toLowerCase().endsWith(".exe")) return `Codex-Design-Studio-${manifest.version}-${platform}-${architecture}-Setup.exe`;
   if (name === "RELEASES") return `RELEASES-${platform}-${architecture}`;
   return name;
 }
 
 const sourceFiles = (await filesBelow(makeRoot)).filter((file) => {
   if (platform === "darwin") return file.endsWith(".dmg");
-  if (platform === "win32") return path.basename(file) === "Setup.exe";
+  if (platform === "win32") return path.extname(file).toLowerCase() === ".exe";
   return true;
 }).sort();
 if (sourceFiles.length === 0) throw new Error(`No primary ${platform}-${architecture} release asset was produced.`);
