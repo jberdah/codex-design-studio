@@ -3,52 +3,17 @@
 [![CI](https://github.com/jberdah/codex-design-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/jberdah/codex-design-studio/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Codex Design Studio is a local-first desktop application for creating a brand project, directing a real Web composition with Codex, checking every edit visually, and exporting production artifacts.
+**Turn scattered brand evidence into a living Design System, then let GPT-5.6 and Codex create, edit, verify, and export production assets from it.**
 
-The application now includes:
+Codex Design Studio is a local-first desktop workspace for founders and small product teams that need brand-consistent Web experiences, presentations, and visual assets without rebuilding the same creative context for every deliverable.
 
-- official Codex App Server authentication with ChatGPT or an OpenAI API key;
-- native workspace selection plus creation, switching, and isolated persistence of portable projects;
-- brand bootstrap from manual direction, URLs, documents, logos, images, and local or remote Git repositories;
-- source provenance, conflict reconciliation, immutable BrandSystem versions, and project-owned design-system presets;
-- an extensible catalog covering Web, Slides, Mobile App, Wireframe, Document, Animation, UI Mockups, CV, 3D object, Research, HTML email, Color + Type pairing, Diagram, and Flier;
-- contextual selection inside the live landing-page preview;
-- freeform HTML/CSS/SVG design edits by Codex, beyond tokens and copy fields;
-- stable inline Web text editing and a transactional slide canvas with move, resize, keyboard controls, undo/redo, grouping, alignment, z-order, typography, and colour controls;
-- versioned OpenAI visual generation, comparison, approval, refinement, restore, and placement, using ChatGPT authentication by default;
-- transactional Playwright screenshots at desktop and mobile sizes, pixel diffs, and overflow rejection;
-- a deterministic offline refinement path for the demo-safe semantic contract;
-- responsive HTML ZIP, design-token JSON, and scene-graph-driven editable PowerPoint exports with rendered validation evidence;
-- optional capability-declared GitHub, GitLab, and Bitbucket adapters, reproducible handoffs, durable jobs, project-local skills/templates, and encrypted collaboration controls;
-- an isolated Electron shell with an embedded Next.js server, Codex CLI, and Chromium headless runtime.
+Most AI design tools stop at a plausible screenshot. Codex Design Studio edits the real artifact, renders the result, and keeps the proposed change separate until deterministic checks and the user accept it.
 
-## How Codex and GPT-5.6 are used
+![Codex Design Studio turns one brand into every future asset](media/devpost/01-one-brand-every-future-asset.png)
 
-Codex App Server is the application's agent runtime and authentication bridge.
-The default model, `gpt-5.6-sol`, receives the active BrandSystem, selected
-visual context, current artifact source, and the user's creative instruction.
-It is used to:
+## Judge quick start
 
-- edit the actual project-scoped HTML, CSS, and SVG rather than describe a hypothetical change;
-- produce schema-constrained brand refinements and resumable project threads;
-- turn immutable brand evidence into structured visual briefs; and
-- invoke native image generation through the user's ChatGPT/Codex account.
-
-The host application—not the model—owns persistence and acceptance. It checks
-source diffs, renders responsive Playwright evidence, rejects overflow or lost
-preview instrumentation, rolls back failed proposals, and records immutable
-asset and export versions. This keeps GPT-5.6 creative while making every
-accepted result inspectable and testable.
-
-## Requirements
-
-- macOS x64 for the currently configured desktop target;
-- Node.js 22 LTS and npm 10+ for development;
-- a ChatGPT/Codex login or OpenAI API key for live Codex edits.
-
-The project pins Codex CLI `0.144.5`, Playwright `1.55.1`, and Electron `43.1.1`. No global Codex installation is required.
-
-## Run in development
+The shortest reproducible path is:
 
 ```bash
 npm install
@@ -56,76 +21,211 @@ npm run preflight
 npm run dev
 ```
 
-Open <http://127.0.0.1:3000>. Use the account button in the top bar to connect with ChatGPT or an API key. Authentication is handled by Codex and is not written into project files.
+Open <http://127.0.0.1:3000>, then:
 
-To run the Electron shell against the development server:
+1. Connect a ChatGPT/Codex account from the account control.
+2. Create a project from a short brand description and an optional reference URL.
+3. Review the synthesized facts, inferences, assumptions, source evidence, and creative brief before approving it.
+4. Select an element in the live Web preview and ask for a composition-level change.
+5. Compare the candidate against the current artifact and inspect desktop/mobile QA evidence.
+6. Accept or reject the candidate, then export HTML, design tokens, or an editable PowerPoint deck.
+
+The deterministic demo path and automated tests do not require a live model call. Live creative editing and image generation use the connected OpenAI account.
+
+## Why GPT-5.6, Codex, and a validating host
+
+The system intentionally separates creative reasoning, agency, verification, and authority.
+
+### GPT-5.6 reasons and creates
+
+The default model, `gpt-5.6-sol`, receives the active BrandSystem, immutable source evidence, the selected visual context, current artifact source, and the user's instruction. It is used to:
+
+- reconcile incomplete or conflicting brand inputs;
+- distinguish facts, inferences, and assumptions;
+- synthesize structured creative briefs rather than copy raw onboarding text;
+- reason across Web, presentation, and visual-asset constraints;
+- make composition-level design changes; and
+- invoke native OpenAI image capabilities through the connected account.
+
+### Codex acts
+
+Codex App Server provides authenticated agent execution through the user's ChatGPT account or an optional API key. It can inspect the project, invoke project-local skills, edit the actual HTML/CSS/SVG, and keep project threads resumable.
+
+### Codex Design Studio verifies
+
+The desktop host—not the model—owns persistence and acceptance. It snapshots the active artifact, validates source changes, renders Playwright evidence, checks responsive overflow and preview instrumentation, records immutable candidates, and restores the original when execution fails.
+
+### The user decides
+
+Extracted evidence and generated briefs require approval. A candidate blocked by a conservative deterministic check can be compared, explicitly accepted, or rejected; the model cannot silently promote its own work.
+
+> **GPT-5.6 reasons and creates. Codex acts. Codex Design Studio verifies. The user decides.**
+
+## What the current build includes
+
+- ChatGPT and API-key authentication through official Codex App Server account methods;
+- native workspace selection with portable, isolated local projects;
+- guided project bootstrap from manual direction and optional reference websites;
+- editable briefs containing evidence-backed facts, inferences, assumptions, questions, and source intent;
+- URL, document, logo, image, and local/remote Git source contracts with provenance and recoverable extraction state;
+- immutable BrandSystem versions, conflict reconciliation, presets, and project-owned tokens;
+- contextual selection and stable inline text editing inside the live Web preview;
+- freeform HTML/CSS/SVG editing beyond token and copy fields;
+- transactional Web candidates with before/after renders, explicit review, rollback, and user override;
+- an editable slide scene graph with move, resize, keyboard controls, undo/redo, grouping, alignment, z-order, typography, and colour controls;
+- versioned OpenAI visual generation, comparison, approval, refinement, restore, and placement;
+- responsive HTML ZIP, token JSON, and editable PowerPoint export;
+- optional provider-neutral GitHub, GitLab, and Bitbucket integration contracts; and
+- an Electron shell containing the standalone Next.js application, Codex CLI, and Playwright runtime.
+
+The catalog also defines contracts for Mobile App, Wireframe, Document, Animation, UI Mockups, CV, 3D object, Research, HTML email, Color + Type pairing, Diagram, and Flier. Catalog presence does not imply that every artifact type has a complete editor or exporter in this submission build.
+
+## Requirements
+
+- Node.js 22 LTS and npm 10+ for development;
+- a ChatGPT/Codex login or OpenAI API key for live agent and image operations;
+- macOS Intel, macOS Apple Silicon, or Windows x64 for the native release; or
+- any platform supported by Node.js and Chromium for source development.
+
+The repository pins Codex CLI `0.144.5`, Playwright `1.55.1`, and Electron `43.1.1`. No global Codex installation is required.
+
+## Development and desktop commands
 
 ```bash
+# Web development
+npm run dev
+
+# Electron shell against the development server
 npm run desktop:dev
+
+# Full source verification
+npm run check:all
+
+# Electron workspace lifecycle
+npm run test:electron
+
+# Build and test the native package for the current architecture
+npm run desktop:make -- --arch=x64
+npm run test:runtime:packaged
+npm run test:electron:packaged
 ```
 
-## Create the desktop application
+GitHub Actions builds and launches separate macOS Intel (`darwin-x64`), macOS Apple Silicon (`darwin-arm64`), and Windows (`win32-x64`) packages. Generated packages are written below `out/` and are never committed.
 
-Install the headless browser locally once, then package or create distributable media:
+## Portable project model
 
-```bash
-PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium
-npm run desktop:package
-npm run desktop:make
-```
-
-Outputs are written below `out/`. `desktop:package` creates the unpacked `.app`; `desktop:make` creates the configured ZIP and DMG. The development build is not code-signed or notarized.
-
-On first launch, the packaged application asks the user to choose or create a portable workspace folder. Project content lives in that folder rather than in the application bundle or Electron user-data directory:
+On first desktop launch, the user chooses or creates a workspace folder:
 
 ```text
 <selected folder>/.codex-design-studio-workspace.json
 <selected folder>/projects/
 ```
 
-Electron `userData` contains only private recent-workspace metadata and operating-system grants. Moving a workspace preserves its ownership marker and allows it to be relinked through the native picker. See [the portable workspace contract](docs/portable-workspaces.md).
+Project content lives in that folder rather than in the application bundle or Electron `userData`. Moving a workspace preserves its ownership marker and allows it to be relinked through the native picker. Electron stores only private recent-workspace metadata and operating-system grants. See [the portable workspace contract](docs/portable-workspaces.md).
 
-## Product flow
+Each project can contain:
 
-1. Connect the user’s OpenAI account.
-2. Choose a portable workspace and create a project from brand direction and optional reference sources.
-3. Reconcile extracted evidence, publish a BrandSystem version, and choose a preset or template when useful.
-4. Select an element directly in the Web preview, or open the slide canvas for direct manipulation.
-5. Ask Codex for a focused adjustment, complete visual redesign, or versioned visual asset.
-6. Inspect the rendered comparisons and run the evidence-backed design review.
-7. Export HTML, tokens, or an editable deck; optionally prepare a provider-neutral repository handoff.
+```text
+brand/                 approved brand data
+design-system/         versioned tokens
+sources/               evidence graph, immutable blobs, extraction runs
+web/                   real editable HTML/CSS/SVG
+slides/                editable scene graph
+visual-assets/         immutable generated asset versions
+reviews/               rendered evidence and decisions
+exports/               HTML, JSON, PPTX, and evidence bundles
+history/               project versions and recovery state
+```
 
-Web edits modify the real `web/index.html`. The host captures a baseline first, runs Codex in a project-scoped writable sandbox, verifies that preview instrumentation remains intact, and then renders desktop and mobile comparisons. A failed, timed-out, or overflowing proposal is rolled back.
+## Transactional creative workflow
+
+For a Web change, the host:
+
+1. snapshots the current source and renders desktop/mobile baselines;
+2. asks Codex to edit the project-scoped artifact;
+3. verifies that the source changed and retained preview instrumentation;
+4. renders the candidate at 1440×1000 and 390×844;
+5. evaluates overflow, clipping, assets, contrast, focus order, and landmarks;
+6. records the candidate and evidence without overwriting the active artifact when checks fail; and
+7. promotes, rejects, or restores only through an explicit transaction.
+
+This makes model output inspectable rather than trusting a textual claim that a design was changed successfully.
 
 ## Verification
 
+The current source baseline passes:
+
+- **164 Vitest unit, domain, renderer, and integration checks**;
+- **9 end-to-end Chromium journeys**;
+- **1 Electron workspace lifecycle journey**;
+- TypeScript generation and typecheck; and
+- the standalone Next.js production build.
+
+Three opt-in live tests are skipped by default because they require external services or account state. Reproduce the standard evidence with:
+
 ```bash
-npm run typecheck
-npm test
-npm run build
-npm run test:e2e
-npm run test:electron
-# or the complete Web verification chain
 npm run check:all
+npm run test:electron
 ```
 
-`npm run test:e2e` uses an isolated `.e2e-workspace` on port 3100 and forces the deterministic path. `npm run test:electron` exercises the context-isolated bridge, relaunch persistence, and revocation; set `CODEX_STUDIO_PACKAGED_APP` to run it against a packaged executable. `npm run test:agent` exercises the live structured App Server path and restores its test project afterward.
+See [the detailed verification record](docs/verification.md).
+
+The submission media are generated from the real local interface with `npm run media:devpost`. A credential-free 1920×1080 walkthrough draft can be recorded with `npm run media:demo-video`.
+
+## How this project was built during OpenAI Build Week
+
+I worked as the product owner and final decision-maker. I defined the problem, target user, trust model, local-first boundary, creative direction, and the acceptance criteria for the submission.
+
+Codex and GPT-5.6 helped turn those decisions into a working application by:
+
+- reading and challenging the evolving product requirements;
+- inspecting comparable desktop creative-agent architectures without copying proprietary code or prompts;
+- proposing the project, evidence, candidate, scene-graph, and release models;
+- implementing the Electron, Next.js, React, TypeScript, Playwright, and PowerPoint paths;
+- writing and running automated tests;
+- reproducing visual failures and correcting them from rendered evidence; and
+- maintaining implementation plans and handoffs through Brainclaw while product ideation continued.
+
+Key human decisions included keeping projects portable and local, making repository access optional and provider-neutral, requiring approval before a BrandSystem is published, retaining user agency over QA-blocked candidates, and prioritising real editable artifacts over generated screenshots.
+
+The project existed only as an initial French product brief before Build Week. The application architecture, implementation, desktop runtime, artifact workflows, automated validation, and submission materials were produced during the event.
+
+## Architecture
+
+```text
+Electron main process
+    ├── sandboxed BrowserWindow ──► Next.js Studio UI
+    └── embedded standalone Next.js server
+            ├── portable project store
+            ├── Codex account and App Server client
+            ├── evidence-aware bootstrap
+            ├── Web and visual-asset agents
+            ├── Playwright rendering and deterministic QA
+            └── HTML, JSON, evidence, and PPTX exporters
+```
+
+The supplied Claude Desktop archive informed only the high-level decision to isolate UI, agent runtime, and heavyweight workers. No proprietary source code, prompts, skills, or assets are included in this repository or its packages.
+
+See [the architecture](docs/architecture.md), [the demo script](docs/demo-script.md), and [the judge testing instructions](docs/judge-testing.md).
 
 ## Project layout
 
 ```text
 desktop/                  Electron main process and runtime preparation
+docs/                     architecture, verification, demo, and workspace contracts
 projects/                 inspectable development project workspaces
 skills/                   brand and Web art-direction workflows
-src/domain/               project, artifact, editing, catalog, and integration contracts
-src/server/               storage, extraction, repositories, Codex, auth, QA, jobs, and exports
+src/domain/               project, artifact, bootstrap, and integration contracts
+src/server/               storage, extraction, Codex, QA, jobs, and exports
 src/app/api/              project-scoped HTTP boundary
 src/components/           Studio canvas, project UI, account UI, and chat
-tests/                    unit, renderer, and Chromium journeys
+tests/                    unit, renderer, Chromium, and Electron journeys
 ```
-
-See [the architecture](docs/architecture.md), [the demo script](docs/demo-script.md), and [the verification record](docs/verification.md).
 
 ## Deliberate limits
 
-This build is local-first and single-user by default. Collaboration and repository providers are explicit opt-in extensions; there is no hosted cloud synchronization service. Signing/notarization, auto-update, Apple Silicon universal packaging, and Windows packaging remain release work. The account belongs to the current OS user and project data remains local unless the user deliberately enables an external capability.
+This submission is local-first and single-user by default. Collaboration and repository providers are opt-in contracts rather than a hosted synchronization service. Signing/notarization, auto-update, cloud collaboration, and some catalog artifact editors remain production work. Live authentication and image generation depend on OpenAI account availability; deterministic tests remain local.
+
+## License
+
+[MIT](LICENSE)

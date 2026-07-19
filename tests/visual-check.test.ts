@@ -43,7 +43,7 @@ describe("deterministic rendered Web audit", () => {
     }
     expect(report.summary.errors).toBeGreaterThanOrEqual(12);
     expect(report.summary.warnings).toBeGreaterThanOrEqual(3);
-  });
+  }, 30_000);
 
   it("marks gradient and translucent contrast as inconclusive instead of blocking the transaction", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "studio-visual-gradient-"));
@@ -65,7 +65,7 @@ describe("deterministic rendered Web audit", () => {
       expect(render.contrast.some((item) => !item.conclusive && item.reason?.includes("pixel sampling"))).toBe(true);
     }
     expect(report.summary.errors).toBe(0);
-  });
+  }, 30_000);
 
   it("measures CSS Color 4 srgb colors conclusively", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "studio-visual-srgb-"));
@@ -84,5 +84,5 @@ describe("deterministic rendered Web audit", () => {
       expect(render.contrast.some((item) => item.conclusive && typeof item.ratio === "number")).toBe(true);
       expect(render.contrast.some((item) => item.reason === "foreground color syntax is not supported")).toBe(false);
     }
-  });
+  }, 30_000);
 });

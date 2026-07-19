@@ -31,15 +31,32 @@ export function projectRoot(projectId = "demo") {
   return path.join(projectsRoot, projectId);
 }
 
+function boundaryPath(value: string) {
+  let resolved = path.resolve(value);
+  if (process.platform === "win32") {
+    // `realpath` and `path.resolve` may disagree on the Win32 namespace prefix
+    // and volume-letter case even though they identify the same file.
+    if (/^\\\\\?\\UNC\\/i.test(resolved)) resolved = `\\\\${resolved.slice(8)}`;
+    else if (/^\\\\\?\\/.test(resolved)) resolved = resolved.slice(4);
+    resolved = resolved.toLowerCase();
+  }
+  return path.normalize(resolved);
+}
+
 function assertInside(root: string, candidate: string) {
-  if (candidate !== root && !candidate.startsWith(`${root}${path.sep}`)) throw new Error("Path escapes authorized workspace");
+  const relative = path.relative(boundaryPath(root), boundaryPath(candidate));
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("Path escapes authorized workspace");
+  }
   return candidate;
 }
 
 export async function canonicalPathInside(root: string, candidate: string) {
   const canonicalRoot = await realpath(root);
   const lexical = path.resolve(candidate);
-  assertInside(canonicalRoot, lexical);
+  // Validate the lexical path against the lexical root before following any
+  // existing ancestor, then validate the reconstructed canonical path below.
+  assertInside(path.resolve(root), lexical);
   let cursor = lexical;
   const missing: string[] = [];
   while (true) {
@@ -74,7 +91,8 @@ export async function safeProjectPath(projectId: string, ...segments: string[]) 
 export function assertInsideProject(projectId: string, candidate: string) {
   const root = projectRoot(projectId);
   const resolved = path.resolve(candidate);
-  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
+  const relative = path.relative(root, resolved);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error("Path escapes project workspace");
   }
   return resolved;

@@ -6,16 +6,16 @@ const failures = [];
 const nodeMajor = Number(process.versions.node.split(".")[0]);
 if (nodeMajor !== 22) failures.push(`Node 22 is required; found ${process.versions.node}.`);
 
-const codex = path.join(process.cwd(), "node_modules", ".bin", "codex");
+const codex = path.join(process.cwd(), "node_modules", "@openai", "codex", "bin", "codex.js");
 try {
-  accessSync(codex, constants.X_OK);
+  accessSync(codex, constants.R_OK);
 } catch {
   failures.push("The project-local Codex CLI is missing. Run npm install.");
 }
 
 let login = "not checked";
 if (!failures.some((failure) => failure.includes("Codex CLI"))) {
-  const result = spawnSync(codex, ["login", "status"], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, [codex, "login", "status"], { encoding: "utf8" });
   login = `${result.stdout}${result.stderr}`.trim() || `exit ${result.status}`;
   if (result.status !== 0) failures.push("Codex authentication is unavailable. Run npx codex login.");
 }

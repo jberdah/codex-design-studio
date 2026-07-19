@@ -253,6 +253,9 @@ export async function inspectRepository(source: Exclude<RepositorySource, { kind
 
 function validateRemote(remote: string) {
   if (!remote || remote.startsWith("-") || /[\0\r\n]/.test(remote) || remote.includes("::")) throw new Error("Invalid Git remote");
+  // WHATWG URL parses a Windows drive letter as a URL scheme (for example
+  // `D:`). Native absolute paths are valid provider-independent Git remotes.
+  if (path.isAbsolute(remote)) return;
   try {
     const parsed = new URL(remote);
     if (["https:", "ssh:", "git+ssh:", "file:"].includes(parsed.protocol)) {

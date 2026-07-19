@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("codexStudio", Object.freeze({
+  runtimeInfo: () => ipcRenderer.invoke("studio:runtime-info"),
   // Sandboxed preload scripts only receive Electron's restricted require shim,
   // so this bridge must remain self-contained instead of importing a local file.
   workspace: Object.freeze({

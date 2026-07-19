@@ -481,7 +481,8 @@ function assertApprovalProject(project: ApprovalProject, session: BootstrapSessi
 
 function resolveProjectRelative(root: string, relative: string) {
   const resolved = path.resolve(root, relative);
-  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) throw new Error("Provenance path escapes the project.");
+  const fromRoot = path.relative(root, resolved);
+  if (fromRoot === ".." || fromRoot.startsWith(`..${path.sep}`) || path.isAbsolute(fromRoot)) throw new Error("Provenance path escapes the project.");
   return resolved;
 }
 

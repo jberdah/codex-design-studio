@@ -1,0 +1,23 @@
+1
+00:00:00,000 --> 00:00:03,500
+One brand. Every future asset.
+
+2
+00:00:03,500 --> 00:00:10,000
+Start with intent, audience, and the outcome—not a generic template.
+
+3
+00:00:10,000 --> 00:00:14,500
+Reference evidence and inspiration remain explicit and reviewable.
+
+4
+00:00:14,500 --> 00:00:19,000
+GPT-5.6 turns evidence into one living, versioned Design System.
+
+5
+00:00:19,000 --> 00:00:31,500
+Codex edits the real artifact. The Studio renders and verifies the proposal before the user decides.
+
+6
+00:00:31,500 --> 00:00:36,760
+One system powers responsive Web, editable slides, visual assets, and exports.
