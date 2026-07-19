@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { spawn } = require("node:child_process");
 const path = require("node:path");
 const http = require("node:http");
+const net = require("node:net");
 const { WorkspaceRegistry } = require("./workspace-registry.cjs");
 const { registerWorkspaceIpc } = require("./workspace-ipc.cjs");
 
@@ -11,11 +12,32 @@ if (process.platform === "win32") {
 }
 
 const HOST = "127.0.0.1";
-const PORT = 32145;
+const PREFERRED_PORT = 32145;
 let serverProcess;
 let mainWindow;
 let registry;
 let releasePlatformGrant;
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+app.on("second-instance", () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
+function findAvailablePort(preferred) {
+  const probe = (port) => new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", reject);
+    server.listen({ port, host: HOST }, () => {
+      const chosen = server.address().port;
+      server.close(() => resolve(chosen));
+    });
+  });
+  return probe(preferred).catch(() => probe(0));
+}
 
 function waitForServer(url, timeoutMs = 45_000) {
   const startedAt = Date.now();
@@ -60,27 +82,32 @@ async function startEmbeddedServer(grant) {
   const packaged = app.isPackaged;
   const serverRoot = packaged ? path.join(process.resourcesPath, "studio-server") : path.resolve(__dirname, "..");
   const runtimeRoot = packaged ? path.join(process.resourcesPath, "studio-runtime") : serverRoot;
+  const port = await findAvailablePort(PREFERRED_PORT);
   const entrypoint = packaged
     ? path.join(serverRoot, "server.js")
     : path.join(serverRoot, "node_modules", "next", "dist", "bin", "next");
-  const args = packaged ? [entrypoint] : [entrypoint, "dev", "--webpack", "--hostname", HOST, "--port", String(PORT)];
+  const args = packaged ? [entrypoint] : [entrypoint, "dev", "--webpack", "--hostname", HOST, "--port", String(port)];
   serverProcess = spawn(process.execPath, args, {
     cwd: serverRoot,
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
       HOSTNAME: HOST,
-      PORT: String(PORT),
+      PORT: String(port),
       NEXT_TELEMETRY_DISABLED: "1",
       CODEX_STUDIO_BUNDLE_DIR: runtimeRoot,
       CODEX_STUDIO_DATA_DIR: grant.root,
-      CODEX_STUDIO_WORKSPACE_ID: grant.markerId
+      CODEX_STUDIO_WORKSPACE_ID: grant.markerId,
+      // The packaged browsers live in studio-runtime, while the server resolves
+      // the playwright module from studio-server; without this redirect the
+      // packaged app cannot find Chromium for capture and QA features.
+      ...(packaged ? { PLAYWRIGHT_BROWSERS_PATH: path.join(runtimeRoot, "node_modules", "playwright-core", ".local-browsers") } : {})
     },
     stdio: ["ignore", "pipe", "pipe"]
   });
   serverProcess.stdout.on("data", (chunk) => console.log(`[studio-server] ${String(chunk).trim()}`));
   serverProcess.stderr.on("data", (chunk) => console.error(`[studio-server] ${String(chunk).trim()}`));
-  const url = `http://${HOST}:${PORT}`;
+  const url = `http://${HOST}:${port}`;
   await waitForServer(url);
   return url;
 }
@@ -206,14 +233,25 @@ async function createWindow() {
   await mainWindow.loadURL(url);
 }
 
-app.whenReady().then(async () => {
-  registry = new WorkspaceRegistry(app.getPath("userData"));
-  installWorkspaceIpc();
-  await createWindow();
-}).catch((error) => {
+function reportStartupFailure(error) {
+  const message = error instanceof Error ? error.message : String(error);
   console.error(error);
+  dialog.showErrorBox(
+    "Codex Design Studio could not start",
+    `${message}\n\nIf the problem persists: check that the workspace folder still exists and is writable, close other Codex Design Studio windows, then relaunch. Logs are printed to the terminal when started from a shell.`
+  );
   app.quit();
-});
+}
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.whenReady().then(async () => {
+    registry = new WorkspaceRegistry(app.getPath("userData"));
+    installWorkspaceIpc();
+    await createWindow();
+  }).catch(reportStartupFailure);
+}
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
-app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow().catch(reportStartupFailure); });
 app.on("before-quit", () => { serverProcess?.kill(); releasePlatformGrant?.(); });
