@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import https from "node:https";
 import type { LookupFunction } from "node:net";
-import { chromium, type Browser, type Page, type Response } from "playwright";
+import { createRequire } from "node:module";
+import path from "node:path";
+import type { Browser, Page, Response } from "playwright";
+import { bundleRoot } from "./paths";
 import {
   DEFAULT_CAPTURE_LIMITS,
   DEFAULT_CAPTURE_VIEWPORTS,
@@ -15,6 +18,13 @@ import {
   type PageObservation
 } from "@/domain/extraction";
 import { assertSafeWebUrl, type UrlPolicyOptions } from "./network-policy";
+
+// Playwright ships in the desktop runtime bundle (studio-runtime), not in the
+// traced Next server output, so it must be resolved from the bundle root at
+// runtime — mirroring how the spawned skill scripts already find it. In source
+// checkouts the bundle root is the repository, so this is the same module.
+const requireFromBundle = createRequire(path.join(bundleRoot, "package.json"));
+const { chromium } = requireFromBundle("playwright") as typeof import("playwright");
 
 export interface CaptureOptions {
   browser?: Browser;

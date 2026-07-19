@@ -50,12 +50,12 @@ if (codexResult.status !== 0 || !/codex/i.test(`${codexResult.stdout}${codexResu
 }
 
 // Exercise the exact resolution path the embedded server uses at runtime:
-// the playwright module shipped inside studio-server plus the browsers
-// directory that desktop/main.cjs exposes through PLAYWRIGHT_BROWSERS_PATH.
-// Injecting an explicit executablePath here would hide a broken bundle.
+// web-capture.ts resolves playwright from the bundle root (studio-runtime)
+// via createRequire, and desktop/main.cjs exposes the packaged browsers
+// through PLAYWRIGHT_BROWSERS_PATH. Injecting an explicit executablePath
+// here would hide a broken bundle.
 process.env.PLAYWRIGHT_BROWSERS_PATH = browsers;
-const serverNodeModules = path.join(resources, "studio-server", "node_modules");
-const playwrightPath = require.resolve("playwright", { paths: [serverNodeModules] });
+const playwrightPath = require.resolve("playwright", { paths: [path.join(runtime, "node_modules")] });
 const playwrightModule = await import(pathToFileURL(playwrightPath).href);
 const { chromium } = playwrightModule.default ?? playwrightModule;
 const browser = await chromium.launch({ headless: true });
