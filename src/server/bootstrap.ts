@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { defaultProject } from "@/domain/defaults";
 import {
@@ -17,6 +17,7 @@ import {
 import type { ProjectData } from "@/domain/types";
 import { safeProjectPath, safeProjectRoot, workspaceRoot } from "./paths";
 import { loadProject, saveProject } from "./store";
+import { renameWithRetry } from "./fs-atomic";
 
 const mutationQueues = new Map<string, Promise<void>>();
 const sourceKinds = new Set(["url", "codebase", "logo", "image", "screenshot", "document", "deck", "spreadsheet", "manual"]);
@@ -147,7 +148,7 @@ async function writeAtomic(file: string, value: unknown) {
   await mkdir(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, file);
+  await renameWithRetry(temporary, file);
 }
 
 async function mutateSession<T>(sessionId: string, operation: (session: BootstrapSession) => Promise<T> | T): Promise<T> {
@@ -537,7 +538,7 @@ async function migrateBootstrapReferenceSources(session: BootstrapSession, proje
     await cp(stagingSources, temporary, { recursive: true, errorOnExist: true });
     graph.projectId = projectId;
     await writeAtomic(path.join(temporary, "graph.json"), graph);
-    await rename(temporary, finalSources);
+    await renameWithRetry(temporary, finalSources);
     await validateMigratedSources(projectId, snapshot);
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
@@ -598,7 +599,7 @@ async function materializeApprovedProject(session: BootstrapSession) {
   await cp(await safeProjectRoot(pendingProjectId), await safeProjectRoot(finalizingProjectId), { recursive: true, errorOnExist: true });
   await rewriteProjectIdentity(finalizingProjectId, finalProjectId);
   if (session.referenceSnapshot?.sourceId) await validateMigratedSources(finalizingProjectId, session.referenceSnapshot, finalProjectId);
-  await rename(await safeProjectRoot(finalizingProjectId), await safeProjectRoot(finalProjectId));
+  await renameWithRetry(await safeProjectRoot(finalizingProjectId), await safeProjectRoot(finalProjectId));
   return loadProject(finalProjectId);
 }
 

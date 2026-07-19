@@ -1,9 +1,10 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { CollaborationAuditEvent, CollaborationCapability, CollaborationConflict, CollaborationRegistry, CollaborationRole, EncryptedSyncEnvelope } from "@/domain/collaboration";
 import { safeProjectPath } from "./paths";
 import { ensureProject } from "./store";
+import { renameWithRetry } from "./fs-atomic";
 
 const mutations = new Map<string, Promise<void>>();
 const capabilities: CollaborationCapability[] = ["encrypted-sync", "sharing", "roles", "audit-history", "conflict-resolution"];
@@ -51,7 +52,7 @@ export async function loadCollaborationRegistry(projectId: string): Promise<Coll
 }
 
 async function atomicJson(target: string, value: unknown) {
-  const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`; await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8"); await rename(temporary, target);
+  const temporary = `${target}.${process.pid}.${randomUUID()}.tmp`; await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8"); await renameWithRetry(temporary, target);
 }
 
 async function mutate<T>(projectId: string, operation: (registry: CollaborationRegistry) => T | Promise<T>) {

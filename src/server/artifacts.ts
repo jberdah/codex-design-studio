@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   createSlideDocument,
@@ -27,6 +27,7 @@ import type { ArtifactKind } from "@/domain/brand-system";
 import { loadBrandSystemRegistry } from "./brand-system";
 import { ensureProject } from "./store";
 import { safeProjectPath } from "./paths";
+import { renameWithRetry } from "./fs-atomic";
 
 const mutationQueues = new Map<string, Promise<void>>();
 
@@ -43,7 +44,7 @@ function hash(value: unknown) { return createHash("sha256").update(JSON.stringif
 async function atomicJson(filePath: string, value: unknown) {
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(stable(value), null, 2)}\n`, "utf8");
-  await rename(temporary, filePath);
+  await renameWithRetry(temporary, filePath);
 }
 
 async function mutateArtifacts<T>(projectId: string, operation: () => Promise<T>) {

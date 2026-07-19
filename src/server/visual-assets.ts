@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PNG } from "pngjs";
 import type {
@@ -20,6 +20,7 @@ import { buildDeliberateVariantPrompts, validateVisualAssetBrief } from "@/domai
 import { loadBrandSystemRegistry } from "./brand-system";
 import { ensureProject } from "./store";
 import { safeProjectPath } from "./paths";
+import { renameWithRetry } from "./fs-atomic";
 
 const mutations = new Map<string, Promise<void>>();
 const activeRuns = new Map<string, AbortController>();
@@ -36,7 +37,7 @@ function stable(value: unknown): unknown {
 async function atomicJson(filePath: string, value: unknown) {
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(stable(value), null, 2)}\n`, "utf8");
-  await rename(temporary, filePath);
+  await renameWithRetry(temporary, filePath);
 }
 
 async function mutate<T>(projectId: string, operation: () => Promise<T>) {

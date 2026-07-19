@@ -1,9 +1,10 @@
-import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash, randomBytes } from "node:crypto";
 import { defaultProject } from "@/domain/defaults";
 import type { ProjectData, ProjectSummary } from "@/domain/types";
 import { safeProjectPath, safeProjectRoot, safeProjectsRoot } from "./paths";
 import { renderLandingHtml, tokensToCss } from "./landing";
+import { renameWithRetry } from "./fs-atomic";
 
 const projectMutationQueues = new Map<string, Promise<void>>();
 
@@ -21,7 +22,7 @@ async function serializeProject<T>(projectId: string, operation: () => Promise<T
 export async function writeTextAtomic(filePath: string, contents: string) {
   const temp = `${filePath}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
   await writeFile(temp, contents, "utf8");
-  await rename(temp, filePath);
+  await renameWithRetry(temp, filePath);
 }
 
 async function writeJsonAtomic(filePath: string, value: unknown) {

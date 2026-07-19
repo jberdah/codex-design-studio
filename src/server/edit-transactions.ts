@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { access, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
   applyEditTransaction,
@@ -16,6 +16,7 @@ import {
 import { assertArtifactAction, createArtifactVersion, loadArtifactRegistry, loadArtifactVersion } from "./artifacts";
 import { ensureProject } from "./store";
 import { safeProjectPath } from "./paths";
+import { renameWithRetry } from "./fs-atomic";
 
 interface PendingCommit {
   requestId: string;
@@ -64,7 +65,7 @@ async function files(projectId: string, sessionId: string) {
 async function atomic(file: string, value: unknown) {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, file);
+  await renameWithRetry(temporary, file);
 }
 
 async function exists(file: string) {

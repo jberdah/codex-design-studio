@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { renameWithRetry } from "./fs-atomic";
 import {
   CODE_REALITY_MAP_SCHEMA,
   type CodeRealityMap,
@@ -445,6 +446,6 @@ export async function materializeCodeRealityMap(snapshot: RepositorySnapshot, ou
   await mkdir(path.dirname(destination), { recursive: true });
   const temporary = `${destination}.${process.pid}.tmp`;
   await writeFile(temporary, `${JSON.stringify(map, null, 2)}\n`, "utf8");
-  await rename(temporary, destination);
+  await renameWithRetry(temporary, destination);
   return map;
 }

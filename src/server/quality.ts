@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type {
   EvidenceBundleManifest,
@@ -19,6 +19,7 @@ import type {
 import { loadArtifactVersion } from "./artifacts";
 import { ensureProject } from "./store";
 import { safeProjectPath } from "./paths";
+import { renameWithRetry } from "./fs-atomic";
 
 const hashBytes = (content: string | Buffer) => createHash("sha256").update(content).digest("hex");
 const timestamp = (clock?: () => Date) => (clock?.() ?? new Date()).toISOString();
@@ -147,7 +148,7 @@ export function createRegressionReview(input: {
 async function atomicJson(filePath: string, value: unknown) {
   const temporary = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, filePath);
+  await renameWithRetry(temporary, filePath);
 }
 
 export async function persistVersionedReview(projectId: string, review: VersionedReview) {

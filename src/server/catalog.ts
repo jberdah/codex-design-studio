@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NO_ARTIFACT_ACTIONS, SLIDE_DIMENSIONS, createSlideDocument, createWebDocument, type ArtifactAction, type ArtifactActionCapabilities } from "@/domain/artifacts";
 import {
@@ -18,6 +18,7 @@ import { createArtifactVersion, loadArtifactRegistry } from "./artifacts";
 import { createBrandSystemDraft, validateBrandSystemContent } from "./brand-system";
 import { safeProjectPath } from "./paths";
 import { ensureProject, loadProject } from "./store";
+import { renameWithRetry } from "./fs-atomic";
 
 const CURATED_AT = "2026-07-18T00:00:00.000Z";
 const IDENTIFIER = /^[a-z0-9][a-z0-9._-]{0,127}$/;
@@ -115,7 +116,7 @@ async function loadCustom(projectId: string): Promise<StoredCatalog> {
 async function atomicJson(file: string, value: unknown) {
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(temporary, file);
+  await renameWithRetry(temporary, file);
 }
 
 async function mutate<T>(projectId: string, operation: (catalog: StoredCatalog) => Promise<T>) {
