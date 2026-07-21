@@ -170,7 +170,7 @@ npm run test:electron
 
 See [the detailed verification record](docs/verification.md).
 
-The submission media are generated from the real local interface with `npm run media:devpost`. A credential-free 1920×1080 walkthrough draft can be recorded with `npm run media:demo-video`.
+The submission media are generated from the real local interface with `npm run media:devpost`. The current [2:49 public Build Week demo](https://youtu.be/UNe7df9nIf4) is recorded with `npm run media:bootstrap-demo`; its source flow is documented in [`docs/demo-script.md`](docs/demo-script.md).
 
 ## How this project was built during OpenAI Build Week
 

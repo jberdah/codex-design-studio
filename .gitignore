@@ -13,6 +13,14 @@ coverage/
 .local-project-materials/
 media/video/*.webm
 media/video/*.mp4
+.codex-design-studio/
+.playwright-cli/
+tmp/
+projects/bootstrap-*/
+media/video/*.wav
+media/video/build-week-v2-*
+media/video/build-week-wow-*
+media/video/build-week-bootstrap-*
 .brainclaw/
 projects/*/history/
 projects/*/exports/

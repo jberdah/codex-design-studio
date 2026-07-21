@@ -754,6 +754,7 @@ export function Studio() {
   if (!project || !data) return <main className="loading-screen"><div className="loader-mark">✦</div><p>Opening the studio…</p></main>;
   const safeSlideIndex = Math.min(activeSlide, Math.max(project.slides.length - 1, 0));
   const activeSlideData = project.slides[safeSlideIndex];
+  const previewHost = `${project.brand.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "studio"}.local`;
 
   return <main className="studio-shell">
     <header className="topbar">
@@ -830,7 +831,7 @@ export function Studio() {
             </article>) : <div className="source-empty">No extracted candidates yet. Process sources or add manual evidence first.</div>}</div>
           </div>}
           {surface === "assets" && <VisualAssetStudio projectId={projectId} project={project} brandSystems={systemRegistry} onBusy={setBusy} onToast={setToast}/>}
-          {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>asteria.local</span>{!pendingWebCandidate && <button className="canvas-edit-toggle web-edit-toggle" onClick={() => setWebEditing((current) => !current)}>{webEditing ? "Done editing" : "Edit canvas"}</button>}<em>↗</em></div>{webEditing && webDocument && !pendingWebCandidate
+          {surface === "web" && <div className={`browser-frame ${mobile ? "mobile" : ""}`}><div className="browser-chrome"><i/><i/><i/><span>{previewHost}</span>{!pendingWebCandidate && <button className="canvas-edit-toggle web-edit-toggle" onClick={() => setWebEditing((current) => !current)}>{webEditing ? "Done editing" : "Edit canvas"}</button>}<em>↗</em></div>{webEditing && webDocument && !pendingWebCandidate
             ? <WebArtifactEditor artifactId="web" document={webDocument} onAutosave={saveWebCanvas} onSelectNode={({ nodeId, label, text }) => setSelection({ deliverableId: "web", designId: nodeId, label, domPath: `[data-design-node-id="${nodeId}"]`, text: text.slice(0, 400), viewport: mobile ? "mobile" : "desktop" })}/>
             : <iframe ref={previewRef} title="Generated landing page" srcDoc={pendingWebCandidate && candidatePreview === "candidate" ? pendingWebCandidate.html : data.landingHtml} sandbox="allow-scripts"/>}</div>}
           {surface === "slides" && (activeSlideData ? <div className="slides-canvas"><div className="slides-stage"><button className="canvas-edit-toggle" onClick={() => setSlideEditing((current) => !current)}>{slideEditing ? "Done editing" : "Edit canvas"}</button>{slideEditing && slideDocument ? <ArtifactCanvasEditor artifactId="slides" document={slideDocument} slideId={activeSlideData.id} onChange={(next) => setSlideDocument(next)} onAutosave={saveSlideCanvas}/> : <SlidePreview slide={activeSlideData} tokens={project.tokens} brandName={project.brand.name} index={safeSlideIndex} active onClick={() => undefined} document={slideDocument}/>}</div><div className="slide-strip">{project.slides.map((slide, index) => <div key={slide.id}><span>0{index + 1}</span><SlidePreview slide={slide} tokens={project.tokens} brandName={project.brand.name} index={index} active={safeSlideIndex === index} onClick={() => setActiveSlide(index)} document={slideDocument}/></div>)}</div></div> : <div className="source-empty">This project has no slides yet. Create them from the chat or switch deliverable.</div>)}
