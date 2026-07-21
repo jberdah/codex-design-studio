@@ -1,0 +1,21 @@
+I built Codex Design Studio with Codex and GPT-5.6 to solve a practical design problem. Brands often start with scattered references, then their website, presentation and visual assets slowly drift apart.
+
+The Studio turns one deliberate direction into connected, editable work. I begin with a clear objective: create the visual system for Codex Design Studio itself, using a public reference as design evidence rather than material to copy.
+
+I add openai.com, choose signal extraction, and make the usage boundary explicit. The source remains traceable, while its assets and copy are never reused. Codex turns that input into a creative brief. Facts, inferences and assumptions remain separate, so I can review what the system knows before approving a direction.
+
+Next I add the Codex Design Studio icon as a first-class brand source. It belongs to the evidence behind the system, not just the final screen.
+
+The Brand profile makes the promise, audience, tone and visual direction concrete. I then inspect the live design-system kit: palette, typography, spacing, shape language and representative components. I save an immutable draft, review it, then publish version one. The Web and presentation outputs are now bound to that approved system.
+
+With the system published, I ask Codex for three editorial visual directions. Each variant is tied to the same brand brief, stored as an immutable version, validated for its target crop, and available to compare. I select an approved visual for the landing page without losing the alternatives.
+
+The landing page is not a mockup. I inspect it at desktop and mobile sizes, then enter canvas editing and select the hero title directly. The selection gives Codex the exact artifact context. I ask for a more distinctive editorial direction, and Codex proposes a real change to the page rather than a separate image.
+
+Before that change becomes active, the Studio preserves the original and opens a candidate review. I compare before and after, inspect desktop and mobile checks, and see the contrast warning that still needs a human decision. I accept deliberately, with that warning recorded, then inspect the updated page on mobile.
+
+The same system also drives an editable presentation. I move through its narrative slides, open the canvas editor, and keep the deck connected to the same source of truth.
+
+Finally, the project is portable: I can export the responsive landing page, an editable PowerPoint deck, and the design tokens themselves.
+
+Codex Design Studio is my experiment in using Codex as more than a code generator: a long-running creative and engineering partner that helps turn evidence into a usable system, real artifacts, and a workflow I can verify before I ship.
